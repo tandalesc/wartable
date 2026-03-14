@@ -2,6 +2,7 @@
 set -euo pipefail
 
 WARTABLE_USER="${WARTABLE_USER:-wartable}"
+WARTABLE_GROUP="$(id -gn "$WARTABLE_USER" 2>/dev/null || echo "$WARTABLE_USER")"
 WARTABLE_DIR="/opt/wartable"
 SERVICE_FILE="/etc/systemd/system/wartable.service"
 
@@ -31,7 +32,7 @@ setup_user() {
 setup_dirs() {
     echo ":: setting up $WARTABLE_DIR"
     sudo mkdir -p "$WARTABLE_DIR"/{dashboard,jobs,logs}
-    sudo chown -R "$WARTABLE_USER":"$WARTABLE_USER" "$WARTABLE_DIR"
+    sudo chown -R "$WARTABLE_USER":"$WARTABLE_GROUP" "$WARTABLE_DIR"
 }
 
 install_service() {
@@ -46,7 +47,7 @@ After=network.target
 [Service]
 Type=simple
 User=$WARTABLE_USER
-Group=$WARTABLE_USER
+Group=$WARTABLE_GROUP
 ExecStart=/usr/local/bin/wartable
 Restart=on-failure
 RestartSec=5
@@ -84,12 +85,15 @@ if ! id "$WARTABLE_USER" &>/dev/null; then
     setup_user
 fi
 
+# Re-resolve group after potential user creation
+WARTABLE_GROUP="$(id -gn "$WARTABLE_USER" 2>/dev/null || echo "$WARTABLE_USER")"
+
 setup_dirs
 
 echo ":: installing binary"
 sudo cp target/release/wartable /usr/local/bin/
 sudo cp -r dashboard/ "$WARTABLE_DIR/dashboard/"
-sudo chown -R "$WARTABLE_USER":"$WARTABLE_USER" "$WARTABLE_DIR"
+sudo chown -R "$WARTABLE_USER":"$WARTABLE_GROUP" "$WARTABLE_DIR"
 
 install_service
 
