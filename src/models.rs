@@ -129,6 +129,17 @@ pub struct JobLogs {
     pub stderr: String,
     pub stdout_offset: u64,
     pub stderr_offset: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub combined: Option<Vec<LogEntry>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub combined_offset: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogEntry {
+    /// "out" or "err"
+    pub stream: String,
+    pub line: String,
 }
 
 /// Events broadcast to dashboard clients

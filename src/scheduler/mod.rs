@@ -344,30 +344,71 @@ impl SchedulerActor {
             Ok((text, total_len))
         };
 
-        let (stdout, stdout_offset) = match stream {
-            LogStream::Stderr => ("".to_string(), 0),
-            _ => read_log(log_dir.join("stdout.log"), since_offset).await?,
-        };
+        match stream {
+            LogStream::Both => {
+                // Read combined log for correct ordering
+                let combined_path = log_dir.join("combined.log");
+                let (combined_raw, combined_offset) = read_log(combined_path, since_offset).await?;
 
-        let (stderr, stderr_offset) = match stream {
-            LogStream::Stdout => ("".to_string(), 0),
-            _ => read_log(log_dir.join("stderr.log"), since_offset).await?,
-        };
+                let mut entries = Vec::new();
+                for line in combined_raw.split_inclusive('\n') {
+                    if line.starts_with('\x02') {
+                        entries.push(LogEntry {
+                            stream: "err".to_string(),
+                            line: line[1..].to_string(),
+                        });
+                    } else {
+                        entries.push(LogEntry {
+                            stream: "out".to_string(),
+                            line: line.to_string(),
+                        });
+                    }
+                }
 
-        let mut logs = JobLogs {
-            stdout,
-            stderr,
-            stdout_offset,
-            stderr_offset,
-        };
+                if let Some(n) = tail {
+                    let len = entries.len();
+                    if len > n {
+                        entries = entries.split_off(len - n);
+                    }
+                }
 
-        // Apply tail
-        if let Some(n) = tail {
-            logs.stdout = tail_lines(&logs.stdout, n);
-            logs.stderr = tail_lines(&logs.stderr, n);
+                Ok(JobLogs {
+                    stdout: String::new(),
+                    stderr: String::new(),
+                    stdout_offset: 0,
+                    stderr_offset: 0,
+                    combined: Some(entries),
+                    combined_offset: Some(combined_offset),
+                })
+            }
+            _ => {
+                let (stdout, stdout_offset) = match stream {
+                    LogStream::Stderr => ("".to_string(), 0),
+                    _ => read_log(log_dir.join("stdout.log"), since_offset).await?,
+                };
+
+                let (stderr, stderr_offset) = match stream {
+                    LogStream::Stdout => ("".to_string(), 0),
+                    _ => read_log(log_dir.join("stderr.log"), since_offset).await?,
+                };
+
+                let mut logs = JobLogs {
+                    stdout,
+                    stderr,
+                    stdout_offset,
+                    stderr_offset,
+                    combined: None,
+                    combined_offset: None,
+                };
+
+                if let Some(n) = tail {
+                    logs.stdout = tail_lines(&logs.stdout, n);
+                    logs.stderr = tail_lines(&logs.stderr, n);
+                }
+
+                Ok(logs)
+            }
         }
-
-        Ok(logs)
     }
 }
 

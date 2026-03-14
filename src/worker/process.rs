@@ -7,7 +7,7 @@ use std::process::Stdio;
 use tokio::fs;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info, warn};
 
 /// Spawn a worker task for a job. Returns a cancel handle.
@@ -35,6 +35,12 @@ pub fn spawn_worker(
     });
 
     cancel_tx
+}
+
+#[derive(Debug)]
+enum LogLine {
+    Stdout(String),
+    Stderr(String),
 }
 
 async fn run_job(
@@ -87,9 +93,64 @@ async fn run_job(
 
     let stdout_path = log_dir.join("stdout.log");
     let stderr_path = log_dir.join("stderr.log");
+    let combined_path = log_dir.join("combined.log");
 
-    let stdout_handle = tokio::spawn(stream_to_file(stdout, stdout_path));
-    let stderr_handle = tokio::spawn(stream_to_file(stderr, stderr_path));
+    // Both stdout and stderr readers send lines to a single writer task
+    // that writes to individual files AND a combined log in arrival order
+    let (tx, rx) = mpsc::channel::<LogLine>(256);
+
+    let tx_out = tx.clone();
+    let stdout_reader = tokio::spawn(async move {
+        let mut buf = BufReader::new(stdout);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match buf.read_line(&mut line).await {
+                Ok(0) => break,
+                Ok(_) => { let _ = tx_out.send(LogLine::Stdout(line.clone())).await; }
+                Err(_) => break,
+            }
+        }
+    });
+
+    let tx_err = tx;
+    let stderr_reader = tokio::spawn(async move {
+        let mut buf = BufReader::new(stderr);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match buf.read_line(&mut line).await {
+                Ok(0) => break,
+                Ok(_) => { let _ = tx_err.send(LogLine::Stderr(line.clone())).await; }
+                Err(_) => break,
+            }
+        }
+    });
+
+    let writer = tokio::spawn(async move {
+        let mut stdout_file = fs::OpenOptions::new()
+            .create(true).append(true).open(&stdout_path).await.unwrap();
+        let mut stderr_file = fs::OpenOptions::new()
+            .create(true).append(true).open(&stderr_path).await.unwrap();
+        let mut combined_file = fs::OpenOptions::new()
+            .create(true).append(true).open(&combined_path).await.unwrap();
+
+        let mut rx = rx;
+        while let Some(line) = rx.recv().await {
+            match &line {
+                LogLine::Stdout(s) => {
+                    let _ = stdout_file.write_all(s.as_bytes()).await;
+                    let _ = combined_file.write_all(s.as_bytes()).await;
+                }
+                LogLine::Stderr(s) => {
+                    let _ = stderr_file.write_all(s.as_bytes()).await;
+                    // Prefix stderr lines so the dashboard can color them
+                    let _ = combined_file.write_all(b"\x02");
+                    let _ = combined_file.write_all(s.as_bytes()).await;
+                }
+            }
+        }
+    });
 
     let exit_code = tokio::select! {
         status = child.wait() => {
@@ -99,7 +160,6 @@ async fn run_job(
         _ = cancel_rx => {
             let pid = child.id();
             if let Some(pid) = pid {
-                // Send SIGTERM to process group
                 unsafe {
                     libc::kill(-(pid as i32), libc::SIGTERM);
                 }
@@ -125,31 +185,9 @@ async fn run_job(
         }
     };
 
-    let _ = stdout_handle.await;
-    let _ = stderr_handle.await;
+    let _ = stdout_reader.await;
+    let _ = stderr_reader.await;
+    let _ = writer.await;
 
     Ok(exit_code)
-}
-
-async fn stream_to_file(
-    reader: impl tokio::io::AsyncRead + Unpin,
-    path: PathBuf,
-) -> anyhow::Result<()> {
-    let mut buf_reader = BufReader::new(reader);
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .await?;
-
-    let mut line = String::new();
-    loop {
-        line.clear();
-        let n = buf_reader.read_line(&mut line).await?;
-        if n == 0 {
-            break;
-        }
-        file.write_all(line.as_bytes()).await?;
-    }
-    Ok(())
 }

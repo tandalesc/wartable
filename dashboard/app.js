@@ -1,7 +1,7 @@
 const API = window.location.origin + '/api';
 let selectedJobId = null;
 let logPollTimer = null;
-let logOffsets = { stdout: 0, stderr: 0 };
+let logOffsets = { stdout: 0, stderr: 0, combined: 0 };
 
 // --- Safe DOM helpers ---
 
@@ -78,7 +78,7 @@ function renderJobs(jobs) {
 async function selectJob(jobId) {
     selectedJobId = jobId;
     document.getElementById('detail-panel').classList.remove('hidden');
-    logOffsets = { stdout: 0, stderr: 0 };
+    logOffsets = { stdout: 0, stderr: 0, combined: 0 };
     clearChildren(document.getElementById('log-output'));
 
     try {
@@ -123,20 +123,18 @@ async function pollLogs() {
     const stream = document.querySelector('input[name="log-stream"]:checked').value;
     try {
         if (stream === 'both') {
-            // Fetch full logs and replace content to maintain correct ordering
-            const res = await fetch(`${API}/jobs/${selectedJobId}/logs?stream=both`);
+            // Fetch combined log for correct chronological ordering
+            const offset = logOffsets.combined || 0;
+            const res = await fetch(`${API}/jobs/${selectedJobId}/logs?stream=both&since_offset=${offset}`);
             const data = await res.json();
-            const output = document.getElementById('log-output');
 
-            // Only update if content changed
-            const newLen = (data.stdout_offset || 0) + (data.stderr_offset || 0);
-            const oldLen = logOffsets.stdout + logOffsets.stderr;
-            if (newLen !== oldLen) {
-                clearChildren(output);
-                if (data.stdout) appendLog(data.stdout, 'stdout');
-                if (data.stderr) appendLog(data.stderr, 'stderr');
-                logOffsets.stdout = data.stdout_offset || 0;
-                logOffsets.stderr = data.stderr_offset || 0;
+            const newOffset = data.combined_offset || 0;
+            if (newOffset > offset && data.combined) {
+                const output = document.getElementById('log-output');
+                for (const entry of data.combined) {
+                    appendLog(entry.line, entry.stream === 'err' ? 'stderr' : 'stdout');
+                }
+                logOffsets.combined = newOffset;
             }
         } else {
             // Single stream: incremental append
