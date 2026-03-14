@@ -121,16 +121,32 @@ function renderDetail(job) {
 async function pollLogs() {
     if (!selectedJobId) return;
     const stream = document.querySelector('input[name="log-stream"]:checked').value;
-    const offset = stream === 'stderr' ? logOffsets.stderr : logOffsets.stdout;
     try {
-        const res = await fetch(`${API}/jobs/${selectedJobId}/logs?stream=${stream}&since_offset=${offset}`);
-        const data = await res.json();
+        if (stream === 'both') {
+            // Fetch stdout and stderr separately to track offsets independently
+            const [outRes, errRes] = await Promise.all([
+                fetch(`${API}/jobs/${selectedJobId}/logs?stream=stdout&since_offset=${logOffsets.stdout}`),
+                fetch(`${API}/jobs/${selectedJobId}/logs?stream=stderr&since_offset=${logOffsets.stderr}`)
+            ]);
+            const outData = await outRes.json();
+            const errData = await errRes.json();
 
-        if (data.stdout) appendLog(data.stdout, 'stdout');
-        if (data.stderr) appendLog(data.stderr, 'stderr');
+            if (outData.stdout) appendLog(outData.stdout, 'stdout');
+            if (errData.stderr) appendLog(errData.stderr, 'stderr');
 
-        logOffsets.stdout = data.stdout_offset || logOffsets.stdout;
-        logOffsets.stderr = data.stderr_offset || logOffsets.stderr;
+            if (outData.stdout_offset > logOffsets.stdout) logOffsets.stdout = outData.stdout_offset;
+            if (errData.stderr_offset > logOffsets.stderr) logOffsets.stderr = errData.stderr_offset;
+        } else {
+            const offset = stream === 'stderr' ? logOffsets.stderr : logOffsets.stdout;
+            const res = await fetch(`${API}/jobs/${selectedJobId}/logs?stream=${stream}&since_offset=${offset}`);
+            const data = await res.json();
+
+            if (data.stdout) appendLog(data.stdout, 'stdout');
+            if (data.stderr) appendLog(data.stderr, 'stderr');
+
+            if (data.stdout_offset > logOffsets.stdout) logOffsets.stdout = data.stdout_offset;
+            if (data.stderr_offset > logOffsets.stderr) logOffsets.stderr = data.stderr_offset;
+        }
     } catch { /* ignore */ }
 }
 
