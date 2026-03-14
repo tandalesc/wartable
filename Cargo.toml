@@ -1,0 +1,27 @@
+[package]
+name = "wartable"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+rmcp = { version = "1.2", features = [
+    "server",
+    "macros",
+    "transport-streamable-http-server",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+toml = "0.8"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+base64 = "0.22"
+tower-http = { version = "0.6", features = ["fs", "cors"] }
+futures = "0.3"
+dirs = "6"
+libc = "0.2"

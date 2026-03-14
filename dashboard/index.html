@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>wartable</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>wartable</h1>
+        <div id="connection-status" class="status-disconnected">disconnected</div>
+    </header>
+    <main>
+        <div id="jobs-panel">
+            <div class="panel-header">
+                <h2>Jobs</h2>
+                <div class="filters">
+                    <select id="status-filter">
+                        <option value="all">All</option>
+                        <option value="running">Running</option>
+                        <option value="queued">Queued</option>
+                        <option value="completed">Completed</option>
+                        <option value="failed">Failed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                    <button id="refresh-btn">Refresh</button>
+                </div>
+            </div>
+            <table id="jobs-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Name / ID</th>
+                        <th>Command</th>
+                        <th>Submitted</th>
+                        <th>Duration</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="jobs-body"></tbody>
+            </table>
+        </div>
+        <div id="detail-panel" class="hidden">
+            <div class="panel-header">
+                <h2>Job Detail</h2>
+                <button id="close-detail">&times;</button>
+            </div>
+            <div id="detail-meta"></div>
+            <div id="log-controls">
+                <label><input type="radio" name="log-stream" value="both" checked> Both</label>
+                <label><input type="radio" name="log-stream" value="stdout"> stdout</label>
+                <label><input type="radio" name="log-stream" value="stderr"> stderr</label>
+                <label><input type="checkbox" id="log-follow" checked> Follow</label>
+            </div>
+            <pre id="log-output"></pre>
+        </div>
+    </main>
+    <script src="app.js"></script>
+</body>
+</html>
