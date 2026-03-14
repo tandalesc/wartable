@@ -2,7 +2,7 @@
 set -euo pipefail
 
 WARTABLE_USER="${WARTABLE_USER:-wartable}"
-WARTABLE_GROUP="$(id -gn "$WARTABLE_USER" 2>/dev/null || echo "$WARTABLE_USER")"
+WARTABLE_GROUP="$(id -gn "$WARTABLE_USER" 2>/dev/null | head -1 || echo "$WARTABLE_USER")"
 WARTABLE_DIR="/opt/wartable"
 SERVICE_FILE="/etc/systemd/system/wartable.service"
 
@@ -86,7 +86,7 @@ if ! id "$WARTABLE_USER" &>/dev/null; then
 fi
 
 # Re-resolve group after potential user creation
-WARTABLE_GROUP="$(id -gn "$WARTABLE_USER" 2>/dev/null || echo "$WARTABLE_USER")"
+WARTABLE_GROUP="$(id -gn "$WARTABLE_USER" 2>/dev/null | head -1 || echo "$WARTABLE_USER")"
 
 setup_dirs
 
