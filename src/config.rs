@@ -90,15 +90,10 @@ fn default_max_concurrent() -> usize {
     8
 }
 fn default_working_dir() -> String {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .to_string_lossy()
-        .to_string()
+    "/opt/wartable/jobs".to_string()
 }
 fn default_log_dir() -> String {
-    let mut p = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
-    p.push(".wartable/logs");
-    p.to_string_lossy().to_string()
+    "/opt/wartable/logs".to_string()
 }
 fn default_kill_grace() -> u64 {
     10
