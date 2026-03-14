@@ -91,7 +91,7 @@ setup_dirs
 
 echo ":: installing binary"
 sudo cp target/release/wartable /usr/local/bin/
-sudo cp -r dashboard/ "$WARTABLE_DIR/dashboard/"
+sudo rsync -a --delete dashboard/ "$WARTABLE_DIR/dashboard/"
 sudo chown -R "$WARTABLE_USER":"$WARTABLE_GROUP" "$WARTABLE_DIR"
 
 install_service

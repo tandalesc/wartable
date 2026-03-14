@@ -123,29 +123,35 @@ async function pollLogs() {
     const stream = document.querySelector('input[name="log-stream"]:checked').value;
     try {
         if (stream === 'both') {
-            // Fetch stdout and stderr separately to track offsets independently
-            const [outRes, errRes] = await Promise.all([
-                fetch(`${API}/jobs/${selectedJobId}/logs?stream=stdout&since_offset=${logOffsets.stdout}`),
-                fetch(`${API}/jobs/${selectedJobId}/logs?stream=stderr&since_offset=${logOffsets.stderr}`)
-            ]);
-            const outData = await outRes.json();
-            const errData = await errRes.json();
+            // Fetch full logs and replace content to maintain correct ordering
+            const res = await fetch(`${API}/jobs/${selectedJobId}/logs?stream=both`);
+            const data = await res.json();
+            const output = document.getElementById('log-output');
 
-            if (outData.stdout) appendLog(outData.stdout, 'stdout');
-            if (errData.stderr) appendLog(errData.stderr, 'stderr');
-
-            if (outData.stdout_offset > logOffsets.stdout) logOffsets.stdout = outData.stdout_offset;
-            if (errData.stderr_offset > logOffsets.stderr) logOffsets.stderr = errData.stderr_offset;
+            // Only update if content changed
+            const newLen = (data.stdout_offset || 0) + (data.stderr_offset || 0);
+            const oldLen = logOffsets.stdout + logOffsets.stderr;
+            if (newLen !== oldLen) {
+                clearChildren(output);
+                if (data.stdout) appendLog(data.stdout, 'stdout');
+                if (data.stderr) appendLog(data.stderr, 'stderr');
+                logOffsets.stdout = data.stdout_offset || 0;
+                logOffsets.stderr = data.stderr_offset || 0;
+            }
         } else {
+            // Single stream: incremental append
             const offset = stream === 'stderr' ? logOffsets.stderr : logOffsets.stdout;
             const res = await fetch(`${API}/jobs/${selectedJobId}/logs?stream=${stream}&since_offset=${offset}`);
             const data = await res.json();
 
-            if (data.stdout) appendLog(data.stdout, 'stdout');
-            if (data.stderr) appendLog(data.stderr, 'stderr');
-
-            if (data.stdout_offset > logOffsets.stdout) logOffsets.stdout = data.stdout_offset;
-            if (data.stderr_offset > logOffsets.stderr) logOffsets.stderr = data.stderr_offset;
+            if (stream === 'stdout' && data.stdout) {
+                appendLog(data.stdout, 'stdout');
+                logOffsets.stdout = data.stdout_offset || logOffsets.stdout;
+            }
+            if (stream === 'stderr' && data.stderr) {
+                appendLog(data.stderr, 'stderr');
+                logOffsets.stderr = data.stderr_offset || logOffsets.stderr;
+            }
         }
     } catch { /* ignore */ }
 }
