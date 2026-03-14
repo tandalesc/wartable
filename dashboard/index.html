@@ -4,76 +4,106 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>wartable</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header>
-        <h1>wartable</h1>
-        <div id="resource-bar">
-            <div class="resource-item">
-                <span class="resource-label">CPU</span>
-                <div class="bar-container"><div class="bar bar-cpu" id="bar-cpu"></div></div>
-                <span class="resource-value" id="val-cpu">-</span>
+        <div class="header-left">
+            <h1>wartable</h1>
+            <div id="connection-dot"></div>
+        </div>
+        <div id="system-metrics">
+            <div class="metric" id="metric-cpu">
+                <div class="metric-top">
+                    <span class="metric-label">CPU</span>
+                    <span class="metric-val" id="val-cpu">--</span>
+                </div>
+                <div class="metric-bar"><div class="metric-fill fill-cpu" id="bar-cpu"></div></div>
             </div>
-            <div class="resource-item">
-                <span class="resource-label">RAM</span>
-                <div class="bar-container"><div class="bar bar-ram" id="bar-ram"></div></div>
-                <span class="resource-value" id="val-ram">-</span>
+            <div class="metric" id="metric-ram">
+                <div class="metric-top">
+                    <span class="metric-label">MEM</span>
+                    <span class="metric-val" id="val-ram">--</span>
+                </div>
+                <div class="metric-bar"><div class="metric-fill fill-ram" id="bar-ram"></div></div>
             </div>
-            <div class="resource-item">
-                <span class="resource-label">Disk</span>
-                <div class="bar-container"><div class="bar bar-disk" id="bar-disk"></div></div>
-                <span class="resource-value" id="val-disk">-</span>
+            <div class="metric" id="metric-disk">
+                <div class="metric-top">
+                    <span class="metric-label">DISK</span>
+                    <span class="metric-val" id="val-disk">--</span>
+                </div>
+                <div class="metric-bar"><div class="metric-fill fill-disk" id="bar-disk"></div></div>
             </div>
-            <div class="resource-item">
-                <span class="resource-label">Load</span>
-                <span class="resource-value" id="val-load">-</span>
+            <div class="metric metric-text">
+                <span class="metric-label">LOAD</span>
+                <span class="metric-val" id="val-load">--</span>
             </div>
         </div>
-        <div id="connection-status" class="status-disconnected">disconnected</div>
     </header>
-    <div id="gpu-bar"></div>
+
+    <div id="gpu-strip"></div>
+
     <main>
         <div id="jobs-panel">
-            <div class="panel-header">
-                <h2>Jobs</h2>
-                <div class="filters">
-                    <select id="status-filter">
-                        <option value="all">All</option>
-                        <option value="running">Running</option>
-                        <option value="queued">Queued</option>
-                        <option value="completed">Completed</option>
-                        <option value="failed">Failed</option>
-                        <option value="cancelled">Cancelled</option>
-                    </select>
-                    <button id="refresh-btn">Refresh</button>
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <span class="toolbar-title">QUEUE</span>
+                    <span class="toolbar-count" id="job-count">0</span>
+                </div>
+                <div class="toolbar-right">
+                    <div class="filter-pills">
+                        <button class="pill active" data-status="all">All</button>
+                        <button class="pill" data-status="running">Running</button>
+                        <button class="pill" data-status="queued">Queued</button>
+                        <button class="pill" data-status="completed">Done</button>
+                        <button class="pill" data-status="failed">Failed</button>
+                        <button class="pill" data-status="cancelled">Cancelled</button>
+                    </div>
                 </div>
             </div>
-            <table id="jobs-table">
-                <thead>
-                    <tr>
-                        <th>Status</th>
-                        <th>Name / ID</th>
-                        <th>Command</th>
-                        <th>Submitted</th>
-                        <th>Duration</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="jobs-body"></tbody>
-            </table>
+            <div class="table-wrap">
+                <table id="jobs-table">
+                    <thead>
+                        <tr>
+                            <th data-sort="status" class="sortable">STATUS</th>
+                            <th data-sort="name" class="sortable sorted-asc">NAME</th>
+                            <th data-sort="command">CMD</th>
+                            <th data-sort="submitted_at" class="sortable">SUBMITTED</th>
+                            <th data-sort="duration" class="sortable">DURATION</th>
+                            <th data-sort="exit_code" class="sortable">EXIT</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobs-body"></tbody>
+                </table>
+                <div id="empty-state" class="hidden">
+                    <span>No jobs</span>
+                </div>
+            </div>
         </div>
+
         <div id="detail-panel" class="hidden">
-            <div class="panel-header">
-                <h2>Job Detail</h2>
-                <button id="close-detail">&times;</button>
+            <div class="detail-header">
+                <div class="detail-title">
+                    <span id="detail-name">-</span>
+                    <span id="detail-status-badge" class="status-badge">-</span>
+                </div>
+                <button id="close-detail" aria-label="Close">&times;</button>
             </div>
             <div id="detail-meta"></div>
             <div id="log-controls">
-                <label><input type="radio" name="log-stream" value="both" checked> Both</label>
-                <label><input type="radio" name="log-stream" value="stdout"> stdout</label>
-                <label><input type="radio" name="log-stream" value="stderr"> stderr</label>
-                <label><input type="checkbox" id="log-follow" checked> Follow</label>
+                <div class="log-tabs">
+                    <button class="log-tab active" data-stream="both">Combined</button>
+                    <button class="log-tab" data-stream="stdout">stdout</button>
+                    <button class="log-tab" data-stream="stderr">stderr</button>
+                </div>
+                <label class="follow-toggle">
+                    <input type="checkbox" id="log-follow" checked>
+                    <span>Follow</span>
+                </label>
             </div>
             <pre id="log-output"></pre>
         </div>
