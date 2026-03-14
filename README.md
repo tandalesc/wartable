@@ -8,6 +8,8 @@ Single Rust binary that serves:
 - **Web dashboard** — live job queue, log tailing, GPU/CPU/RAM metrics
 - **REST API** — same data surface for the dashboard
 
+![wartable dashboard](docs/wartable_dashboard.png)
+
 ## Quick Start
 
 ### Systemd (recommended for GPU servers)
@@ -61,17 +63,51 @@ Restart Claude Code. You'll have these tools available:
 
 | Tool | Description |
 |------|-------------|
-| `submit_job` | Submit a bash command to the work queue |
+| `submit_job` | Submit a bash command with optional resource requirements, priority, tags, env vars, and file uploads |
 | `list_jobs` | List jobs, filter by status/tag |
 | `get_job_status` | Full details for a specific job |
-| `get_job_logs` | Tail stdout/stderr, incremental polling via offset |
+| `get_job_logs` | Tail stdout/stderr/combined logs with incremental polling via byte offset |
 | `cancel_job` | Cancel queued or running jobs (SIGTERM → SIGKILL) |
-| `upload_file` | Write a base64-encoded file to the server |
+| `upload_file` | Write a base64-encoded file to the server with optional Unix permissions |
 | `download_file` | Read a file from the server as base64 |
 
 ## Dashboard
 
 Open `http://<server-ip>:9400` in a browser. Dark mode, live-updating job table with log viewer, GPU/CPU/RAM/disk metrics.
+
+### REST API
+
+The dashboard is backed by a REST API available at the same address:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/jobs` | List jobs (supports `status`, `tag`, `limit` query params) |
+| `GET /api/jobs/{id}` | Get job details |
+| `GET /api/jobs/{id}/logs` | Get logs (`stream`, `tail`, `since_offset` query params) |
+| `POST /api/jobs/{id}/cancel` | Cancel a job |
+| `GET /api/resources` | System snapshot — CPU, RAM, disk, load, per-GPU stats |
+
+## Job Features
+
+Jobs support several options beyond a bare command:
+
+- **Priority** — integer priority (default 0); higher values jump the queue
+- **Tags** — string tags for filtering and grouping
+- **Resource requirements** — GPU count, VRAM minimum, CPU cores, RAM, disk
+- **Environment variables** — custom env vars injected into the job process
+- **File uploads** — base64-encoded files written before the job starts, with optional Unix permission bits
+- **Working directory** — per-job override for where the command runs
+
+### Log Management
+
+Each job captures stdout and stderr separately, plus a combined log with chronological ordering and stream markers (`out`/`err`). Logs support:
+- Incremental polling via byte offset (`since_offset`)
+- Tail mode for the last N lines
+- Stream filtering (stdout only, stderr only, or combined)
+
+### Process Control
+
+Jobs run in isolated process groups with Python-specific buffering fixes (`PYTHONUNBUFFERED`, line-buffered stdout via `stdbuf`). Cancellation sends SIGTERM first, then SIGKILL after the grace period.
 
 ## Working Directory
 
