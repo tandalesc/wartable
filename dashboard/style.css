@@ -38,6 +38,53 @@ header h1 {
 .status-connected { color: var(--green); font-size: 12px; }
 .status-disconnected { color: var(--red); font-size: 12px; }
 
+#resource-bar {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    flex: 1;
+    margin: 0 24px;
+}
+
+.resource-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.resource-label {
+    color: var(--text-muted);
+    font-weight: 500;
+    width: 32px;
+}
+
+.resource-value {
+    color: var(--text);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    min-width: 64px;
+}
+
+.bar-container {
+    width: 80px;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+    width: 0%;
+}
+
+.bar-cpu { background: var(--blue); }
+.bar-ram { background: var(--green); }
+.bar-disk { background: var(--yellow); }
+
 main {
     display: flex;
     height: calc(100vh - 49px);

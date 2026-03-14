@@ -147,6 +147,26 @@ function appendLog(text, stream) {
     }
 }
 
+// --- Resources ---
+
+async function fetchResources() {
+    try {
+        const res = await fetch(`${API}/resources`);
+        const r = await res.json();
+
+        document.getElementById('bar-cpu').style.width = r.cpu.usage_pct + '%';
+        document.getElementById('val-cpu').textContent = r.cpu.usage_pct.toFixed(0) + '% (' + r.cpu.cores + ' cores)';
+
+        document.getElementById('bar-ram').style.width = r.ram.usage_pct.toFixed(0) + '%';
+        document.getElementById('val-ram').textContent = r.ram.used_gb.toFixed(1) + ' / ' + r.ram.total_gb.toFixed(1) + ' GB';
+
+        document.getElementById('bar-disk').style.width = r.disk.usage_pct.toFixed(0) + '%';
+        document.getElementById('val-disk').textContent = r.disk.used_gb.toFixed(0) + ' / ' + r.disk.total_gb.toFixed(0) + ' GB';
+
+        document.getElementById('val-load').textContent = r.load.one.toFixed(1) + ' / ' + r.load.five.toFixed(1) + ' / ' + r.load.fifteen.toFixed(1);
+    } catch { /* ignore */ }
+}
+
 // --- Actions ---
 
 async function cancelJob(jobId) {
@@ -185,4 +205,6 @@ document.getElementById('status-filter').onchange = fetchJobs;
 document.getElementById('refresh-btn').onclick = fetchJobs;
 
 fetchJobs();
+fetchResources();
 setInterval(fetchJobs, 3000);
+setInterval(fetchResources, 5000);

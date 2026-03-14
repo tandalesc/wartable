@@ -9,6 +9,27 @@
 <body>
     <header>
         <h1>wartable</h1>
+        <div id="resource-bar">
+            <div class="resource-item">
+                <span class="resource-label">CPU</span>
+                <div class="bar-container"><div class="bar bar-cpu" id="bar-cpu"></div></div>
+                <span class="resource-value" id="val-cpu">-</span>
+            </div>
+            <div class="resource-item">
+                <span class="resource-label">RAM</span>
+                <div class="bar-container"><div class="bar bar-ram" id="bar-ram"></div></div>
+                <span class="resource-value" id="val-ram">-</span>
+            </div>
+            <div class="resource-item">
+                <span class="resource-label">Disk</span>
+                <div class="bar-container"><div class="bar bar-disk" id="bar-disk"></div></div>
+                <span class="resource-value" id="val-disk">-</span>
+            </div>
+            <div class="resource-item">
+                <span class="resource-label">Load</span>
+                <span class="resource-value" id="val-load">-</span>
+            </div>
+        </div>
         <div id="connection-status" class="status-disconnected">disconnected</div>
     </header>
     <main>

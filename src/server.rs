@@ -32,6 +32,7 @@ pub fn build_router(
         .route("/jobs/{id}", get(api::get_job))
         .route("/jobs/{id}/logs", get(api::get_job_logs))
         .route("/jobs/{id}/cancel", post(api::cancel_job))
+        .route("/resources", get(api::get_resources))
         .with_state(scheduler);
 
     // Static dashboard files - check multiple locations
