@@ -5,45 +5,46 @@ Resource-aware job scheduler for GPU homelab servers. Lets multiple Claude Code 
 Single Rust binary that serves:
 - **MCP server** (streamable HTTP via rmcp) — Claude Code connects directly
 - **Job scheduler** — priority queue, concurrent dispatch, process management
-- **Web dashboard** — live job queue, log tailing, status monitoring
+- **Web dashboard** — live job queue, log tailing, GPU/CPU/RAM metrics
 - **REST API** — same data surface for the dashboard
 
 ## Quick Start
 
-### Docker (recommended)
+### Systemd (recommended for GPU servers)
 
 ```bash
-# Clone and start
 git clone git@github.com:tandalesc/wartable.git
 cd wartable
-docker compose up -d --build
+./deploy.sh
 ```
 
-For GPU passthrough, uncomment the `deploy.resources` section in `docker-compose.yml`.
+This builds, installs to `/usr/local/bin`, and sets up a systemd service. To update later, just run `./deploy.sh` again.
 
-### Binary
+```bash
+# Manage the service
+sudo systemctl status wartable
+journalctl -u wartable -f
+sudo systemctl restart wartable
+```
+
+### Binary (manual)
 
 ```bash
 cargo build --release
 ./target/release/wartable
 ```
 
-### Systemd
+### Docker
 
 ```bash
-cargo build --release
-sudo cp target/release/wartable /usr/local/bin/
-sudo mkdir -p /opt/wartable && sudo cp -r dashboard/ /opt/wartable/dashboard/
-sudo cp wartable.service /etc/systemd/system/
-sudo systemctl enable --now wartable
-
-# Logs
-journalctl -u wartable -f
+docker compose up -d --build
 ```
+
+Requires [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) for GPU metrics.
 
 ## Claude Code Setup
 
-Add to `~/.claude/mcp.json`:
+Add to `~/.claude/mcp.json` on any machine that should be able to submit jobs:
 
 ```json
 {
@@ -70,28 +71,46 @@ Restart Claude Code. You'll have these tools available:
 
 ## Dashboard
 
-Open `http://<server-ip>:9400` in a browser. Dark mode, live-updating job table with log viewer.
+Open `http://<server-ip>:9400` in a browser. Dark mode, live-updating job table with log viewer, GPU/CPU/RAM/disk metrics.
+
+## Working Directory
+
+Jobs run in `/opt/wartable/jobs` by default. Each job can specify a custom `working_dir` when submitted (e.g., to run in an existing project directory).
+
+To change the default:
+
+```toml
+# ~/.wartable/config.toml
+[workers]
+default_working_dir = "/path/to/your/workspace"
+```
+
+Jobs run as the system user that started wartable. If you need access to directories outside `/opt/wartable`, either:
+- Run wartable as a user with appropriate permissions
+- Set `working_dir` per job to a directory that user can access
 
 ## Configuration
 
-Optional `~/.wartable/config.toml`:
+All configuration is optional. Defaults work out of the box.
+
+Create `~/.wartable/config.toml` to customize:
 
 ```toml
 [server]
-host = "0.0.0.0"
-port = 9400
+host = "0.0.0.0"    # listen address
+port = 9400          # listen port
 
 [scheduler]
-max_concurrent_jobs = 8
+max_concurrent_jobs = 8    # max parallel jobs
 
 [workers]
-default_working_dir = "/home/user"
-log_dir = "~/.wartable/logs"
-kill_grace_period_secs = 10
+default_working_dir = "/opt/wartable/jobs"    # where jobs run by default
+log_dir = "/opt/wartable/logs"                # stdout/stderr capture
+kill_grace_period_secs = 10                   # SIGTERM → SIGKILL timeout
 
 [dashboard]
 enabled = true
-# static_dir = "/opt/wartable/dashboard"
+# static_dir = "/opt/wartable/dashboard"      # override dashboard path
 ```
 
 ## Architecture
@@ -103,4 +122,4 @@ Browser ──HTTP─────┘                          │
                                          Event Bus ──► Dashboard
 ```
 
-All mutable state lives in the scheduler actor (tokio mpsc). No shared locks. Jobs run as the user that started wartable.
+All mutable state lives in the scheduler actor (tokio mpsc). No shared locks. GPU metrics via NVML, system metrics via sysinfo.
