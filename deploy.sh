@@ -47,7 +47,6 @@ After=network.target
 [Service]
 Type=simple
 User=$WARTABLE_USER
-Group=$WARTABLE_GROUP
 ExecStart=/usr/local/bin/wartable
 Restart=on-failure
 RestartSec=5
