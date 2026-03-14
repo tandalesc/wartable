@@ -65,13 +65,16 @@ async fn run_job(
     // Ensure working directory exists
     fs::create_dir_all(working_dir).await?;
 
-    let mut cmd = Command::new("bash");
-    cmd.arg("-c")
+    let mut cmd = Command::new("stdbuf");
+    cmd.args(["-oL", "-eL", "bash", "-c"])
         .arg(&job.spec.command)
         .current_dir(working_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .process_group(0);
+        .process_group(0)
+        // Force line-buffered output for common runtimes
+        .env("PYTHONUNBUFFERED", "1")
+        .env("PYTHONDONTWRITEBYTECODE", "1");
 
     for (k, v) in &job.spec.env {
         cmd.env(k, v);

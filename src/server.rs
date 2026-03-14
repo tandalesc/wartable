@@ -2,15 +2,18 @@ use axum::Router;
 use axum::routing::{get, post};
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::StreamableHttpService;
+use std::path::PathBuf;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 
 use crate::api;
+use crate::config::Config;
 use crate::events::EventBus;
 use crate::mcp::WartableTools;
 use crate::scheduler::SchedulerHandle;
 
 pub fn build_router(
+    config: &Config,
     scheduler: SchedulerHandle,
     _event_bus: EventBus,
 ) -> Router {
@@ -31,8 +34,29 @@ pub fn build_router(
         .route("/jobs/{id}/cancel", post(api::cancel_job))
         .with_state(scheduler);
 
-    // Static dashboard files
-    let dashboard_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("dashboard");
+    // Static dashboard files - check multiple locations
+    let dashboard_dir = config
+        .dashboard
+        .static_dir
+        .as_ref()
+        .map(PathBuf::from)
+        .filter(|p| p.exists())
+        .or_else(|| {
+            // Next to the binary
+            std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|p| p.join("dashboard")))
+                .filter(|p| p.exists())
+        })
+        .or_else(|| {
+            // /opt/wartable/dashboard (Docker)
+            let p = PathBuf::from("/opt/wartable/dashboard");
+            p.exists().then_some(p)
+        })
+        .unwrap_or_else(|| {
+            // Build-time fallback
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("dashboard")
+        });
 
     Router::new()
         .nest_service("/mcp", mcp_service)

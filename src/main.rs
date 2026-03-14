@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
     let scheduler = scheduler::start(config.clone(), event_bus.clone());
     info!("scheduler actor started");
 
-    let router = server::build_router(scheduler, event_bus);
+    let router = server::build_router(&config, scheduler, event_bus);
 
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;

@@ -1,0 +1,18 @@
+[Unit]
+Description=wartable - GPU job scheduler
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/wartable
+Restart=on-failure
+RestartSec=5
+Environment=RUST_LOG=info
+
+# Run as root to access all working dirs
+# Or change to your user:
+# User=youruser
+# Group=youruser
+
+[Install]
+WantedBy=multi-user.target

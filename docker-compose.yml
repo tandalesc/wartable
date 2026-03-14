@@ -1,0 +1,19 @@
+services:
+  wartable:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "9400:9400"
+    volumes:
+      - ${HOME}/.wartable:/root/.wartable
+      - /home:/home
+      - /root:/root
+      - /tmp:/tmp
+    # Uncomment for GPU access:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
