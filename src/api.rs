@@ -92,6 +92,21 @@ pub struct ResourceSnapshot {
     pub ram: RamInfo,
     pub disk: DiskInfo,
     pub load: LoadInfo,
+    pub gpus: Vec<GpuInfo>,
+}
+
+#[derive(Serialize)]
+pub struct GpuInfo {
+    pub index: u32,
+    pub name: String,
+    pub vram_total_gb: f64,
+    pub vram_used_gb: f64,
+    pub vram_free_gb: f64,
+    pub gpu_utilization_pct: u32,
+    pub memory_utilization_pct: u32,
+    pub temperature_c: u32,
+    pub power_draw_w: Option<f64>,
+    pub power_limit_w: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -172,8 +187,47 @@ pub async fn get_resources() -> Json<ResourceSnapshot> {
             fifteen: System::load_average().fifteen,
         };
 
-        ResourceSnapshot { cpu, ram, disk, load }
+        let gpus = get_gpu_info();
+
+        ResourceSnapshot { cpu, ram, disk, load, gpus }
     }).await.unwrap();
 
     Json(snapshot)
+}
+
+fn get_gpu_info() -> Vec<GpuInfo> {
+    let nvml = match nvml_wrapper::Nvml::init() {
+        Ok(n) => n,
+        Err(_) => return Vec::new(),
+    };
+
+    let count = match nvml.device_count() {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    (0..count)
+        .filter_map(|i| {
+            let dev = nvml.device_by_index(i).ok()?;
+            let name = dev.name().unwrap_or_else(|_| "Unknown".into());
+            let mem = dev.memory_info().ok()?;
+            let util = dev.utilization_rates().ok();
+            let temp = dev.temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu).unwrap_or(0);
+            let power_draw = dev.power_usage().ok().map(|mw| mw as f64 / 1000.0);
+            let power_limit = dev.enforced_power_limit().ok().map(|mw| mw as f64 / 1000.0);
+
+            Some(GpuInfo {
+                index: i,
+                name,
+                vram_total_gb: mem.total as f64 / 1_073_741_824.0,
+                vram_used_gb: mem.used as f64 / 1_073_741_824.0,
+                vram_free_gb: mem.free as f64 / 1_073_741_824.0,
+                gpu_utilization_pct: util.as_ref().map(|u| u.gpu).unwrap_or(0),
+                memory_utilization_pct: util.as_ref().map(|u| u.memory).unwrap_or(0),
+                temperature_c: temp,
+                power_draw_w: power_draw,
+                power_limit_w: power_limit,
+            })
+        })
+        .collect()
 }

@@ -164,7 +164,43 @@ async function fetchResources() {
         document.getElementById('val-disk').textContent = r.disk.used_gb.toFixed(0) + ' / ' + r.disk.total_gb.toFixed(0) + ' GB';
 
         document.getElementById('val-load').textContent = r.load.one.toFixed(1) + ' / ' + r.load.five.toFixed(1) + ' / ' + r.load.fifteen.toFixed(1);
+
+        renderGpus(r.gpus || []);
     } catch { /* ignore */ }
+}
+
+function renderGpus(gpus) {
+    const container = document.getElementById('gpu-bar');
+    if (gpus.length === 0) {
+        container.classList.remove('visible');
+        return;
+    }
+    container.classList.add('visible');
+    clearChildren(container);
+
+    for (const gpu of gpus) {
+        const vramPct = (gpu.vram_used_gb / gpu.vram_total_gb * 100).toFixed(0);
+        const card = el('div', { className: 'gpu-card' },
+            el('span', { className: 'gpu-name' }, 'GPU ' + gpu.index),
+            el('span', { style: 'color:#8b949e;font-size:11px' }, gpu.name),
+            el('span', { className: 'gpu-stat' },
+                'Util ',
+                el('span', null, gpu.gpu_utilization_pct + '%')
+            ),
+            el('span', { className: 'gpu-stat' },
+                'VRAM ',
+                el('div', { className: 'bar-container' },
+                    el('div', { className: 'bar bar-vram', style: 'width:' + vramPct + '%' })
+                ),
+                el('span', null, gpu.vram_used_gb.toFixed(1) + '/' + gpu.vram_total_gb.toFixed(0) + 'G')
+            ),
+            el('span', { className: 'gpu-temp' }, gpu.temperature_c + '\u00B0C'),
+            gpu.power_draw_w
+                ? el('span', { className: 'gpu-power' }, gpu.power_draw_w.toFixed(0) + 'W')
+                : null
+        );
+        container.appendChild(card);
+    }
 }
 
 // --- Actions ---

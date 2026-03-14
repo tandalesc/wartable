@@ -85,9 +85,64 @@ header h1 {
 .bar-ram { background: var(--green); }
 .bar-disk { background: var(--yellow); }
 
+#gpu-bar {
+    display: none;
+    padding: 8px 20px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+#gpu-bar.visible {
+    display: flex;
+}
+
+.gpu-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    min-width: 280px;
+}
+
+.gpu-name {
+    color: var(--text);
+    font-weight: 500;
+    min-width: 60px;
+}
+
+.gpu-stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+}
+
+.gpu-stat .bar-container {
+    width: 48px;
+}
+
+.bar-gpu { background: #a371f7; }
+.bar-vram { background: #f778ba; }
+
+.gpu-temp { color: var(--yellow); }
+.gpu-power { color: var(--text-muted); }
+
 main {
     display: flex;
-    height: calc(100vh - 49px);
+    flex: 1;
+    overflow: hidden;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
 }
 
 #jobs-panel {
