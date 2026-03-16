@@ -69,11 +69,11 @@ Restart Claude Code. You'll have these tools available:
 | `get_job_logs` | Tail stdout/stderr/combined logs with incremental polling via byte offset |
 | `cancel_job` | Cancel queued or running jobs (SIGTERM → SIGKILL) |
 | `upload_file` | Write a base64-encoded file to the server with optional Unix permissions |
-| `download_file` | Read a file from the server as base64 |
+| `download_file` | Read a file from the server — images returned as native MCP image content, text inline, others as base64. Includes `download_url` for direct HTTP access |
 
 ## Dashboard
 
-Open `http://<server-ip>:9400` in a browser. Dark mode, live-updating job table with log viewer, GPU/CPU/RAM/disk metrics.
+Open `http://<server-ip>:9400` in a browser. Dark mode, live-updating job table with log viewer, GPU/CPU/RAM/disk metrics. Responsive layout for tablet and mobile.
 
 ### REST API
 
@@ -86,6 +86,7 @@ The dashboard is backed by a REST API available at the same address:
 | `GET /api/jobs/{id}/logs` | Get logs (`stream`, `tail`, `since_offset` query params) |
 | `POST /api/jobs/{id}/cancel` | Cancel a job |
 | `GET /api/resources` | System snapshot — CPU, RAM, disk, load, per-GPU stats |
+| `GET /api/files/{path}` | Download a file with correct Content-Type (path must be under log_dir or working_dir) |
 
 ## Job Features
 
@@ -147,6 +148,37 @@ kill_grace_period_secs = 10                   # SIGTERM → SIGKILL timeout
 [dashboard]
 enabled = true
 # static_dir = "/opt/wartable/dashboard"      # override dashboard path
+
+[auth]
+enabled = false                                # set true to require API keys
+# api_keys = [
+#   { name = "claude", key = "wt-your-secret-key-here" },
+# ]
+```
+
+### Authentication
+
+When `[auth] enabled = true`, all `/api` and `/mcp` routes require a valid API key via `Authorization: Bearer <key>` or `X-API-Key: <key>` header. The dashboard static files are always public — the dashboard will prompt for a key on 401 and store it in localStorage.
+
+```bash
+# Test with curl
+curl -H "X-API-Key: wt-your-secret-key-here" http://localhost:9400/api/jobs
+```
+
+For Claude Code, add the key as a header in your MCP config:
+
+```json
+{
+  "mcpServers": {
+    "wartable": {
+      "type": "streamable-http",
+      "url": "http://<server-ip>:9400/mcp",
+      "headers": {
+        "X-API-Key": "wt-your-secret-key-here"
+      }
+    }
+  }
+}
 ```
 
 ## Architecture
