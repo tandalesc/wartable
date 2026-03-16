@@ -1528,6 +1528,7 @@ dependencies = [
  "dirs",
  "futures",
  "libc",
+ "mime_guess",
  "nvml-wrapper",
  "rmcp",
  "schemars",
