@@ -3,7 +3,7 @@ use crate::scheduler::{JobFilter, LogStream, SchedulerHandle};
 use base64::Engine;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{Implementation, ServerCapabilities, ServerInfo};
+use rmcp::model::{CallToolResult, Content, Implementation, ServerCapabilities, ServerInfo};
 use rmcp::{ServerHandler, tool, tool_handler, tool_router};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -264,23 +264,53 @@ impl WartableTools {
         }
     }
 
-    #[tool(description = "Download a file from the server. Returns base64-encoded content and a download_url for HTTP access.")]
+    #[tool(description = "Download a file from the server. Images are returned as native image content. Text files are returned inline. Other files are base64-encoded. All responses include a download_url for direct HTTP access.")]
     async fn download_file(
         &self,
         Parameters(params): Parameters<DownloadFileParams>,
-    ) -> String {
-        match tokio::fs::read(&params.path).await {
-            Ok(content) => {
-                let encoded = base64::engine::general_purpose::STANDARD.encode(&content);
-                let download_url = format!("/api/files/{}", params.path.trim_start_matches('/'));
-                serde_json::json!({
-                    "path": params.path,
-                    "size_bytes": content.len(),
-                    "content_base64": encoded,
-                    "download_url": download_url,
-                }).to_string()
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        let bytes = match tokio::fs::read(&params.path).await {
+            Ok(b) => b,
+            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Failed to read file: {}", e))])),
+        };
+
+        let mime = mime_guess::from_path(&params.path)
+            .first_or_octet_stream()
+            .to_string();
+        let download_url = format!("/api/files/{}", params.path.trim_start_matches('/'));
+
+        let meta_text = format!(
+            "path: {}\nsize: {} bytes\ntype: {}\ndownload_url: {}",
+            params.path, bytes.len(), mime, download_url
+        );
+
+        let content = if mime.starts_with("image/") {
+            let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+            vec![
+                Content::text(meta_text),
+                Content::image(encoded, mime),
+            ]
+        } else if mime.starts_with("text/") || mime == "application/json" || mime == "application/xml" || mime == "application/toml" {
+            match String::from_utf8(bytes) {
+                Ok(text) => vec![
+                    Content::text(meta_text),
+                    Content::text(text),
+                ],
+                Err(e) => {
+                    let encoded = base64::engine::general_purpose::STANDARD.encode(e.as_bytes());
+                    vec![
+                        Content::text(format!("{}\nNote: file is not valid UTF-8, returning base64", meta_text)),
+                        Content::text(encoded),
+                    ]
+                }
             }
-            Err(e) => format!("{{\"error\": \"Failed to read file: {}\"}}", e),
-        }
+        } else {
+            let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+            vec![
+                Content::text(format!("{}\ncontent_base64: {}", meta_text, encoded)),
+            ]
+        };
+
+        Ok(CallToolResult::success(content))
     }
 }
