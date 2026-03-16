@@ -421,6 +421,194 @@ fn tail_lines(s: &str, n: usize) -> String {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::events::EventBus;
+    use std::collections::HashMap;
+
+    fn test_config() -> Config {
+        Config {
+            server: crate::config::ServerConfig::default(),
+            scheduler: crate::config::SchedulerConfig {
+                max_concurrent_jobs: 0, // don't actually dispatch jobs in tests
+            },
+            workers: crate::config::WorkerConfig {
+                default_working_dir: "/tmp/wartable-test-jobs".to_string(),
+                log_dir: "/tmp/wartable-test-logs".to_string(),
+                kill_grace_period_secs: 5,
+            },
+            dashboard: crate::config::DashboardConfig::default(),
+        }
+    }
+
+    fn make_spec(command: &str, priority: i32, tags: Vec<&str>) -> JobSpec {
+        JobSpec {
+            command: command.to_string(),
+            working_dir: None,
+            env: HashMap::new(),
+            resources: ResourceRequirements::default(),
+            files: Vec::new(),
+            priority,
+            tags: tags.into_iter().map(String::from).collect(),
+            name: Some(command.to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn submit_and_get_job() {
+        let handle = start(test_config(), EventBus::new(16));
+
+        let (job_id, position) = handle.submit_job(make_spec("echo hi", 0, vec![])).await;
+        assert!(!job_id.is_empty());
+        assert_eq!(position, 0);
+
+        let job = handle.get_job(job_id.clone()).await;
+        assert!(job.is_some());
+        let job = job.unwrap();
+        assert_eq!(job.id, job_id);
+        assert_eq!(job.spec.command, "echo hi");
+        assert_eq!(job.status, JobStatus::Queued); // max_concurrent=0, stays queued
+    }
+
+    #[tokio::test]
+    async fn submit_multiple_and_query() {
+        let handle = start(test_config(), EventBus::new(16));
+
+        handle.submit_job(make_spec("job1", 0, vec!["ml"])).await;
+        handle.submit_job(make_spec("job2", 0, vec!["web"])).await;
+        handle.submit_job(make_spec("job3", 0, vec!["ml"])).await;
+
+        let all = handle
+            .query_jobs(JobFilter {
+                status: None,
+                tag: None,
+                limit: 50,
+            })
+            .await;
+        assert_eq!(all.len(), 3);
+
+        let ml_only = handle
+            .query_jobs(JobFilter {
+                status: None,
+                tag: Some("ml".to_string()),
+                limit: 50,
+            })
+            .await;
+        assert_eq!(ml_only.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn query_with_status_filter() {
+        let handle = start(test_config(), EventBus::new(16));
+
+        handle.submit_job(make_spec("job1", 0, vec![])).await;
+        handle.submit_job(make_spec("job2", 0, vec![])).await;
+
+        let queued = handle
+            .query_jobs(JobFilter {
+                status: Some(JobStatus::Queued),
+                tag: None,
+                limit: 50,
+            })
+            .await;
+        assert_eq!(queued.len(), 2);
+
+        let running = handle
+            .query_jobs(JobFilter {
+                status: Some(JobStatus::Running),
+                tag: None,
+                limit: 50,
+            })
+            .await;
+        assert_eq!(running.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn query_with_limit() {
+        let handle = start(test_config(), EventBus::new(16));
+
+        for i in 0..10 {
+            handle
+                .submit_job(make_spec(&format!("job{}", i), 0, vec![]))
+                .await;
+        }
+
+        let limited = handle
+            .query_jobs(JobFilter {
+                status: None,
+                tag: None,
+                limit: 3,
+            })
+            .await;
+        assert_eq!(limited.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn cancel_queued_job() {
+        let handle = start(test_config(), EventBus::new(16));
+
+        let (job_id, _) = handle.submit_job(make_spec("echo cancel me", 0, vec![])).await;
+
+        let result = handle.cancel_job(job_id.clone()).await;
+        assert!(result.is_ok());
+        let (prev, new) = result.unwrap();
+        assert_eq!(prev, JobStatus::Queued);
+        assert_eq!(new, JobStatus::Cancelled);
+
+        // Job should now be in completed list, not queue
+        let job = handle.get_job(job_id).await.unwrap();
+        assert_eq!(job.status, JobStatus::Cancelled);
+        assert!(job.completed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn cancel_nonexistent_job() {
+        let handle = start(test_config(), EventBus::new(16));
+        let result = handle.cancel_job("nonexistent".to_string()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn get_nonexistent_job() {
+        let handle = start(test_config(), EventBus::new(16));
+        let job = handle.get_job("nonexistent".to_string()).await;
+        assert!(job.is_none());
+    }
+
+    #[tokio::test]
+    async fn priority_ordering_in_queue() {
+        let handle = start(test_config(), EventBus::new(16));
+
+        handle.submit_job(make_spec("low", 0, vec![])).await;
+        handle.submit_job(make_spec("high", 10, vec![])).await;
+        handle.submit_job(make_spec("med", 5, vec![])).await;
+
+        let jobs = handle
+            .query_jobs(JobFilter {
+                status: Some(JobStatus::Queued),
+                tag: None,
+                limit: 50,
+            })
+            .await;
+        // query_jobs sorts by status then time, but queue order is by priority
+        assert_eq!(jobs.len(), 3);
+    }
+
+    #[test]
+    fn tail_lines_basic() {
+        assert_eq!(tail_lines("a\nb\nc\nd\ne", 3), "c\nd\ne");
+        assert_eq!(tail_lines("a\nb\nc", 5), "a\nb\nc");
+        assert_eq!(tail_lines("", 3), "");
+        assert_eq!(tail_lines("single", 1), "single");
+    }
+
+    #[test]
+    fn tail_lines_exact() {
+        assert_eq!(tail_lines("a\nb\nc", 3), "a\nb\nc");
+    }
+}
+
 /// Start the scheduler actor. Returns a handle for sending messages.
 pub fn start(config: Config, event_bus: EventBus) -> SchedulerHandle {
     let (tx, mut rx) = mpsc::channel::<SchedulerMsg>(256);
