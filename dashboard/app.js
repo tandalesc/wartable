@@ -8,6 +8,64 @@ let sortDir = 'desc';
 let activeStream = 'both';
 let activeFilter = 'all';
 
+// ── Auth ──
+
+function getApiKey() {
+    return localStorage.getItem('wartable_api_key');
+}
+
+function setApiKey(key) {
+    localStorage.setItem('wartable_api_key', key);
+}
+
+function showAuthModal() {
+    document.getElementById('auth-overlay').classList.add('visible');
+    document.getElementById('auth-error').classList.remove('visible');
+    document.getElementById('auth-key-input').value = '';
+    document.getElementById('auth-key-input').focus();
+}
+
+function hideAuthModal() {
+    document.getElementById('auth-overlay').classList.remove('visible');
+}
+
+async function apiFetch(url, opts = {}) {
+    const key = getApiKey();
+    if (key) {
+        opts.headers = opts.headers || {};
+        opts.headers['X-API-Key'] = key;
+    }
+    const res = await fetch(url, opts);
+    if (res.status === 401) {
+        showAuthModal();
+        throw new Error('Unauthorized');
+    }
+    return res;
+}
+
+document.getElementById('auth-submit').addEventListener('click', async () => {
+    const key = document.getElementById('auth-key-input').value.trim();
+    if (!key) return;
+    // Test the key
+    try {
+        const res = await fetch(`${API}/resources`, { headers: { 'X-API-Key': key } });
+        if (res.status === 401) {
+            document.getElementById('auth-error').classList.add('visible');
+            return;
+        }
+        setApiKey(key);
+        hideAuthModal();
+        fetchJobs();
+        fetchResources();
+    } catch {
+        document.getElementById('auth-error').classList.add('visible');
+    }
+});
+
+document.getElementById('auth-key-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('auth-submit').click();
+});
+
 // ── DOM helpers ──
 
 function el(tag, attrs, ...children) {
@@ -27,6 +85,18 @@ function el(tag, attrs, ...children) {
 }
 
 function clearChildren(p) { while (p.firstChild) p.removeChild(p.firstChild); }
+
+// ── Mobile scroll lock ──
+
+function updateBodyScroll() {
+    const panel = document.getElementById('detail-panel');
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    if (isMobile && !panel.classList.contains('hidden')) {
+        document.body.style.overflow = 'hidden';
+    } else {
+        document.body.style.overflow = '';
+    }
+}
 
 // ── Sorting ──
 
@@ -83,7 +153,7 @@ function updateSortIndicators() {
 async function fetchJobs() {
     const params = activeFilter !== 'all' ? `?status=${activeFilter}` : '';
     try {
-        const res = await fetch(`${API}/jobs${params}`);
+        const res = await apiFetch(`${API}/jobs${params}`);
         currentJobs = await res.json();
         renderJobs(currentJobs);
         document.getElementById('connection-dot').classList.add('ok');
@@ -140,11 +210,12 @@ function renderJobs(jobs) {
 async function selectJob(jobId) {
     selectedJobId = jobId;
     document.getElementById('detail-panel').classList.remove('hidden');
+    updateBodyScroll();
     logOffsets = { stdout: 0, stderr: 0, combined: 0 };
     clearChildren(document.getElementById('log-output'));
 
     try {
-        const res = await fetch(`${API}/jobs/${jobId}`);
+        const res = await apiFetch(`${API}/jobs/${jobId}`);
         const job = await res.json();
         renderDetail(job);
     } catch { /* ignore */ }
@@ -183,7 +254,7 @@ async function pollLogs() {
     try {
         if (activeStream === 'both') {
             const offset = logOffsets.combined || 0;
-            const res = await fetch(`${API}/jobs/${selectedJobId}/logs?stream=both&since_offset=${offset}`);
+            const res = await apiFetch(`${API}/jobs/${selectedJobId}/logs?stream=both&since_offset=${offset}`);
             const data = await res.json();
             const newOffset = data.combined_offset || 0;
             if (newOffset > offset && data.combined) {
@@ -194,7 +265,7 @@ async function pollLogs() {
             }
         } else {
             const offset = activeStream === 'stderr' ? logOffsets.stderr : logOffsets.stdout;
-            const res = await fetch(`${API}/jobs/${selectedJobId}/logs?stream=${activeStream}&since_offset=${offset}`);
+            const res = await apiFetch(`${API}/jobs/${selectedJobId}/logs?stream=${activeStream}&since_offset=${offset}`);
             const data = await res.json();
             if (activeStream === 'stdout' && data.stdout) {
                 appendLog(data.stdout, 'stdout');
@@ -224,7 +295,7 @@ function appendLog(text, stream) {
 
 async function fetchResources() {
     try {
-        const res = await fetch(`${API}/resources`);
+        const res = await apiFetch(`${API}/resources`);
         const r = await res.json();
 
         document.getElementById('bar-cpu').style.width = r.cpu.usage_pct + '%';
@@ -278,7 +349,7 @@ function renderGpus(gpus) {
 // ── Actions ──
 
 async function cancelJob(jobId) {
-    await fetch(`${API}/jobs/${jobId}/cancel`, { method: 'POST' });
+    await apiFetch(`${API}/jobs/${jobId}/cancel`, { method: 'POST' });
     fetchJobs();
 }
 
@@ -336,7 +407,11 @@ document.getElementById('close-detail').onclick = () => {
     document.getElementById('detail-panel').classList.add('hidden');
     selectedJobId = null;
     if (logPollTimer) clearInterval(logPollTimer);
+    updateBodyScroll();
 };
+
+// Responsive scroll lock on resize
+window.addEventListener('resize', updateBodyScroll);
 
 // Go
 fetchJobs();

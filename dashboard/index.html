@@ -108,6 +108,15 @@
             <pre id="log-output"></pre>
         </div>
     </main>
+    <div id="auth-overlay">
+        <div class="auth-modal">
+            <h2>Authentication</h2>
+            <p>This wartable instance requires an API key.</p>
+            <input type="password" id="auth-key-input" placeholder="API key">
+            <span id="auth-error">Invalid API key. Please try again.</span>
+            <button id="auth-submit">Connect</button>
+        </div>
+    </div>
     <script src="app.js"></script>
 </body>
 </html>

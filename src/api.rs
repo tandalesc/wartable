@@ -1,11 +1,18 @@
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
-use axum::response::Json;
+use axum::http::{header, StatusCode};
+use axum::response::{IntoResponse, Json};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use sysinfo::System;
 
 use crate::models::*;
 use crate::scheduler::{JobFilter, LogStream, SchedulerHandle};
+
+#[derive(Clone)]
+pub struct ApiState {
+    pub scheduler: SchedulerHandle,
+    pub allowed_dirs: Vec<PathBuf>,
+}
 
 #[derive(Deserialize)]
 pub struct ListJobsQuery {
@@ -22,9 +29,10 @@ pub struct LogsQuery {
 }
 
 pub async fn list_jobs(
-    State(scheduler): State<SchedulerHandle>,
+    State(state): State<ApiState>,
     Query(q): Query<ListJobsQuery>,
 ) -> Json<Vec<JobInfo>> {
+    let scheduler = &state.scheduler;
     let status = q.status.and_then(|s| match s.as_str() {
         "queued" => Some(JobStatus::Queued),
         "running" => Some(JobStatus::Running),
@@ -44,10 +52,10 @@ pub async fn list_jobs(
 }
 
 pub async fn get_job(
-    State(scheduler): State<SchedulerHandle>,
+    State(state): State<ApiState>,
     Path(job_id): Path<String>,
 ) -> Result<Json<Job>, StatusCode> {
-    scheduler
+    state.scheduler
         .get_job(job_id)
         .await
         .map(Json)
@@ -55,10 +63,11 @@ pub async fn get_job(
 }
 
 pub async fn get_job_logs(
-    State(scheduler): State<SchedulerHandle>,
+    State(state): State<ApiState>,
     Path(job_id): Path<String>,
     Query(q): Query<LogsQuery>,
 ) -> Result<Json<JobLogs>, (StatusCode, String)> {
+    let scheduler = &state.scheduler;
     let stream = match q.stream.as_deref() {
         Some("stdout") => LogStream::Stdout,
         Some("stderr") => LogStream::Stderr,
@@ -73,10 +82,10 @@ pub async fn get_job_logs(
 }
 
 pub async fn cancel_job(
-    State(scheduler): State<SchedulerHandle>,
+    State(state): State<ApiState>,
     Path(job_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    match scheduler.cancel_job(job_id.clone()).await {
+    match state.scheduler.cancel_job(job_id.clone()).await {
         Ok((prev, new)) => Ok(Json(serde_json::json!({
             "job_id": job_id,
             "previous_status": prev,
@@ -193,6 +202,61 @@ pub async fn get_resources() -> Json<ResourceSnapshot> {
     }).await.unwrap();
 
     Json(snapshot)
+}
+
+pub async fn get_file(
+    State(state): State<ApiState>,
+    Path(path): Path<String>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // Reject path traversal
+    if path.contains("..") {
+        return Err((StatusCode::BAD_REQUEST, "Path traversal not allowed".into()));
+    }
+
+    let requested = PathBuf::from(&path);
+    let canonical = tokio::fs::canonicalize(&requested)
+        .await
+        .map_err(|_| (StatusCode::NOT_FOUND, format!("File not found: {}", path)))?;
+
+    // Verify the file is under an allowed directory
+    let allowed = state
+        .allowed_dirs
+        .iter()
+        .any(|dir| canonical.starts_with(dir));
+    if !allowed {
+        return Err((StatusCode::FORBIDDEN, "Path outside allowed directories".into()));
+    }
+
+    let metadata = tokio::fs::metadata(&canonical)
+        .await
+        .map_err(|_| (StatusCode::NOT_FOUND, format!("File not found: {}", path)))?;
+    if !metadata.is_file() {
+        return Err((StatusCode::BAD_REQUEST, "Not a regular file".into()));
+    }
+
+    let content = tokio::fs::read(&canonical)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mime = mime_guess::from_path(&canonical)
+        .first_or_octet_stream()
+        .to_string();
+
+    let filename = canonical
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "download".into());
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, mime),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("inline; filename=\"{}\"", filename),
+            ),
+        ],
+        content,
+    ))
 }
 
 fn get_gpu_info() -> Vec<GpuInfo> {

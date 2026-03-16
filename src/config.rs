@@ -11,6 +11,8 @@ pub struct Config {
     pub workers: WorkerConfig,
     #[serde(default)]
     pub dashboard: DashboardConfig,
+    #[serde(default)]
+    pub auth: AuthConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -80,6 +82,29 @@ impl Default for DashboardConfig {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct AuthConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub api_keys: Vec<ApiKeyEntry>,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            api_keys: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ApiKeyEntry {
+    pub name: String,
+    pub key: String,
+}
+
 fn default_host() -> String {
     "0.0.0.0".to_string()
 }
@@ -115,6 +140,7 @@ impl Config {
                 scheduler: SchedulerConfig::default(),
                 workers: WorkerConfig::default(),
                 dashboard: DashboardConfig::default(),
+                auth: AuthConfig::default(),
             })
         }
     }
@@ -127,6 +153,11 @@ impl Config {
 
     pub fn log_dir(&self) -> PathBuf {
         let expanded = shellexpand_tilde(&self.workers.log_dir);
+        PathBuf::from(expanded)
+    }
+
+    pub fn working_dir(&self) -> PathBuf {
+        let expanded = shellexpand_tilde(&self.workers.default_working_dir);
         PathBuf::from(expanded)
     }
 }

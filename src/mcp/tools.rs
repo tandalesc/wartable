@@ -264,7 +264,7 @@ impl WartableTools {
         }
     }
 
-    #[tool(description = "Download a file from the server. Returns base64-encoded content.")]
+    #[tool(description = "Download a file from the server. Returns base64-encoded content and a download_url for HTTP access.")]
     async fn download_file(
         &self,
         Parameters(params): Parameters<DownloadFileParams>,
@@ -272,10 +272,12 @@ impl WartableTools {
         match tokio::fs::read(&params.path).await {
             Ok(content) => {
                 let encoded = base64::engine::general_purpose::STANDARD.encode(&content);
+                let download_url = format!("/api/files/{}", params.path.trim_start_matches('/'));
                 serde_json::json!({
                     "path": params.path,
                     "size_bytes": content.len(),
                     "content_base64": encoded,
+                    "download_url": download_url,
                 }).to_string()
             }
             Err(e) => format!("{{\"error\": \"Failed to read file: {}\"}}", e),

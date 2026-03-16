@@ -544,3 +544,136 @@ tbody tr.selected { background: var(--bg-3); }
 }
 
 tbody tr { animation: fadeIn 0.2s ease both; }
+
+/* ── Auth Modal ── */
+#auth-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.8);
+    align-items: center;
+    justify-content: center;
+}
+
+#auth-overlay.visible { display: flex; }
+
+.auth-modal {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 32px;
+    width: 360px;
+    max-width: 90vw;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.auth-modal h2 {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+
+.auth-modal p {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+}
+
+#auth-key-input {
+    background: var(--bg-0);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+#auth-key-input:focus { border-color: var(--accent); }
+
+#auth-submit {
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius);
+    color: var(--bg-0);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 10px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+#auth-submit:hover { opacity: 0.85; }
+
+#auth-error {
+    font-size: 11px;
+    color: var(--red);
+    display: none;
+}
+
+#auth-error.visible { display: block; }
+
+/* ── Responsive: Tablet ── */
+@media (max-width: 768px) {
+    #detail-panel {
+        position: fixed;
+        inset: 0;
+        width: 100% !important;
+        min-width: unset !important;
+        z-index: 100;
+        border-left: none;
+    }
+
+    #system-metrics { display: none !important; }
+    #gpu-strip { display: none !important; }
+
+    .filter-pills { flex-wrap: wrap; }
+
+    /* Hide CMD and EXIT columns */
+    th:nth-child(3), td:nth-child(3),
+    th:nth-child(6), td:nth-child(6) {
+        display: none;
+    }
+
+    .pill { padding: 6px 12px; font-size: 11px; }
+    .cancel-btn { padding: 5px 12px; font-size: 10px; }
+    .log-tab { padding: 6px 12px; font-size: 11px; }
+}
+
+/* ── Responsive: Mobile ── */
+@media (max-width: 480px) {
+    header {
+        flex-direction: column;
+        height: auto;
+        padding: 10px 12px;
+        gap: 6px;
+        align-items: flex-start;
+    }
+
+    /* Hide DURATION column too */
+    th:nth-child(5), td:nth-child(5) {
+        display: none;
+    }
+
+    .toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 8px 12px;
+    }
+
+    #log-output {
+        font-size: 12px;
+    }
+}
