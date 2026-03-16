@@ -89,6 +89,12 @@ WARTABLE_GROUP="$(id -g "$WARTABLE_USER" 2>/dev/null || echo "$WARTABLE_USER")"
 
 setup_dirs
 
+# Stop service if already running before replacing the binary
+if systemctl is-active --quiet wartable 2>/dev/null; then
+    echo ":: stopping running wartable service"
+    sudo systemctl stop wartable
+fi
+
 echo ":: installing binary"
 sudo cp target/release/wartable /usr/local/bin/
 sudo rsync -a --delete dashboard/ "$WARTABLE_DIR/dashboard/"
@@ -98,7 +104,6 @@ install_service
 
 echo ":: starting wartable"
 sudo systemctl enable --now wartable
-sudo systemctl restart wartable
 
 echo ""
 echo ":: status"

@@ -166,46 +166,114 @@ async function fetchJobs() {
     }
 }
 
+function updateRow(tr, job) {
+    const tds = tr.children;
+    const exitText = job.exit_code !== null && job.exit_code !== undefined
+        ? String(job.exit_code) : '-';
+    const exitClass = job.exit_code === 0 ? 'exit-ok'
+        : job.exit_code !== null && job.exit_code !== undefined ? 'exit-fail' : 'exit-na';
+
+    // Status badge
+    const badge = tds[0].firstChild;
+    if (badge) {
+        badge.className = `status-badge status-${job.status}`;
+        badge.textContent = job.status;
+    }
+    tds[1].textContent = job.name || job.job_id.slice(0, 8);
+    tds[2].textContent = job.command;
+    tds[2].className = 'cmd-cell';
+    tds[3].textContent = timeAgo(job.submitted_at);
+    tds[4].textContent = duration(job);
+    tds[5].textContent = exitText;
+    tds[5].className = `exit-cell ${exitClass}`;
+    const killable = ['queued', 'running'].includes(job.status);
+    if (killable) {
+        if (!tds[6].firstChild || tds[6].firstChild.tagName !== 'BUTTON') {
+            clearChildren(tds[6]);
+            tds[6].appendChild(el('button', {
+                className: 'cancel-btn',
+                onclick: (e) => { e.stopPropagation(); cancelJob(job.job_id); }
+            }, 'KILL'));
+        }
+    } else {
+        clearChildren(tds[6]);
+    }
+    tr.className = job.job_id === selectedJobId ? 'selected' : '';
+}
+
+function createRow(job) {
+    const exitText = job.exit_code !== null && job.exit_code !== undefined
+        ? String(job.exit_code) : '-';
+    const exitClass = job.exit_code === 0 ? 'exit-ok'
+        : job.exit_code !== null && job.exit_code !== undefined ? 'exit-fail' : 'exit-na';
+
+    const tr = el('tr', {
+            onclick: () => selectJob(job.job_id),
+            className: job.job_id === selectedJobId ? 'selected' : ''
+        },
+        el('td', null, el('span', { className: `status-badge status-${job.status}` }, job.status)),
+        el('td', null, job.name || job.job_id.slice(0, 8)),
+        el('td', { className: 'cmd-cell' }, job.command),
+        el('td', { className: 'time-cell' }, timeAgo(job.submitted_at)),
+        el('td', { className: 'time-cell' }, duration(job)),
+        el('td', { className: `exit-cell ${exitClass}` }, exitText),
+        el('td', null,
+            ['queued', 'running'].includes(job.status)
+                ? el('button', {
+                    className: 'cancel-btn',
+                    onclick: (e) => { e.stopPropagation(); cancelJob(job.job_id); }
+                }, 'KILL')
+                : null
+        )
+    );
+    tr.dataset.jobId = job.job_id;
+    return tr;
+}
+
 function renderJobs(jobs) {
     const sorted = sortJobs(jobs);
     const tbody = document.getElementById('jobs-body');
     const empty = document.getElementById('empty-state');
-    clearChildren(tbody);
 
     document.getElementById('job-count').textContent = jobs.length;
 
     if (sorted.length === 0) {
+        clearChildren(tbody);
         empty.classList.remove('hidden');
         return;
     }
     empty.classList.add('hidden');
 
-    for (const job of sorted) {
-        const exitText = job.exit_code !== null && job.exit_code !== undefined
-            ? String(job.exit_code) : '-';
-        const exitClass = job.exit_code === 0 ? 'exit-ok'
-            : job.exit_code !== null && job.exit_code !== undefined ? 'exit-fail' : 'exit-na';
+    // Build map of existing rows by job_id
+    const existingRows = {};
+    for (const tr of Array.from(tbody.children)) {
+        if (tr.dataset.jobId) existingRows[tr.dataset.jobId] = tr;
+    }
 
-        const tr = el('tr', {
-                onclick: () => selectJob(job.job_id),
-                className: job.job_id === selectedJobId ? 'selected' : ''
-            },
-            el('td', null, el('span', { className: `status-badge status-${job.status}` }, job.status)),
-            el('td', null, job.name || job.job_id.slice(0, 8)),
-            el('td', { className: 'cmd-cell' }, job.command),
-            el('td', { className: 'time-cell' }, timeAgo(job.submitted_at)),
-            el('td', { className: 'time-cell' }, duration(job)),
-            el('td', { className: `exit-cell ${exitClass}` }, exitText),
-            el('td', null,
-                ['queued', 'running'].includes(job.status)
-                    ? el('button', {
-                        className: 'cancel-btn',
-                        onclick: (e) => { e.stopPropagation(); cancelJob(job.job_id); }
-                    }, 'KILL')
-                    : null
-            )
-        );
-        tbody.appendChild(tr);
+    // Build new row order, reusing existing DOM nodes
+    const newRows = [];
+    for (const job of sorted) {
+        const existing = existingRows[job.job_id];
+        if (existing) {
+            updateRow(existing, job);
+            delete existingRows[job.job_id];
+            newRows.push(existing);
+        } else {
+            newRows.push(createRow(job));
+        }
+    }
+
+    // Remove rows no longer in the list
+    for (const tr of Object.values(existingRows)) {
+        tr.remove();
+    }
+
+    // Reorder / insert into correct positions
+    for (let i = 0; i < newRows.length; i++) {
+        const current = tbody.children[i];
+        if (current !== newRows[i]) {
+            tbody.insertBefore(newRows[i], current || null);
+        }
     }
 }
 
