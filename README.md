@@ -122,9 +122,54 @@ To change the default:
 default_working_dir = "/path/to/your/workspace"
 ```
 
-Jobs run as the system user that started wartable. If you need access to directories outside `/opt/wartable`, either:
-- Run wartable as a user with appropriate permissions
-- Set `working_dir` per job to a directory that user can access
+### User & Permissions
+
+All jobs run as the system user that owns the wartable process. The deploy script creates a dedicated `wartable` system user by default.
+
+**Using a custom user:**
+
+```bash
+# Deploy with your own user account
+WARTABLE_USER=myuser ./deploy.sh
+```
+
+The deploy script will:
+1. Skip user creation if the user already exists
+2. Add the user to `video` and `render` groups (for GPU access via NVML)
+3. Set ownership of `/opt/wartable` to that user
+4. Run the systemd service as that user
+
+**Granting access to project directories:**
+
+If jobs need to read/write directories outside `/opt/wartable` (e.g., your home directory or shared project folders), add the wartable user to the appropriate group or adjust directory permissions:
+
+```bash
+# Option 1: Add wartable user to your group
+sudo usermod -aG mygroup wartable
+
+# Option 2: Grant access to a specific directory
+sudo setfacl -R -m u:wartable:rwx /home/myuser/projects
+
+# Option 3: Run as your own user instead of a system user
+WARTABLE_USER=$(whoami) ./deploy.sh
+```
+
+**Running without deploy.sh:**
+
+If you run wartable manually (`cargo run` or `./target/release/wartable`), jobs run as your current user with your current permissions — no special setup needed. The `WARTABLE_USER` variable only applies to the deploy script and systemd service.
+
+**GPU access:**
+
+The deploy script automatically adds the service user to `video` and `render` groups. If GPU metrics aren't showing up, verify group membership:
+
+```bash
+# Check groups
+groups wartable
+
+# Add manually if needed
+sudo usermod -aG video,render wartable
+sudo systemctl restart wartable
+```
 
 ## Configuration
 
