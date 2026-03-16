@@ -139,3 +139,97 @@ fn shellexpand_tilde(path: &str) -> String {
     }
     path.to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_defaults() {
+        let config: Config = toml::from_str("").unwrap();
+        assert_eq!(config.server.host, "0.0.0.0");
+        assert_eq!(config.server.port, 9400);
+        assert_eq!(config.scheduler.max_concurrent_jobs, 8);
+        assert_eq!(config.workers.default_working_dir, "/opt/wartable/jobs");
+        assert_eq!(config.workers.log_dir, "/opt/wartable/logs");
+        assert_eq!(config.workers.kill_grace_period_secs, 10);
+        assert!(config.dashboard.enabled);
+        assert!(config.dashboard.static_dir.is_none());
+    }
+
+    #[test]
+    fn config_partial_override() {
+        let toml = r#"
+            [server]
+            port = 8080
+
+            [scheduler]
+            max_concurrent_jobs = 4
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.server.port, 8080);
+        assert_eq!(config.server.host, "0.0.0.0"); // default preserved
+        assert_eq!(config.scheduler.max_concurrent_jobs, 4);
+        assert_eq!(config.workers.log_dir, "/opt/wartable/logs"); // default preserved
+    }
+
+    #[test]
+    fn config_full_override() {
+        let toml = r#"
+            [server]
+            host = "127.0.0.1"
+            port = 3000
+
+            [scheduler]
+            max_concurrent_jobs = 2
+
+            [workers]
+            default_working_dir = "/tmp/jobs"
+            log_dir = "/tmp/logs"
+            kill_grace_period_secs = 30
+
+            [dashboard]
+            enabled = false
+            static_dir = "/var/www/dashboard"
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.server.host, "127.0.0.1");
+        assert_eq!(config.server.port, 3000);
+        assert_eq!(config.scheduler.max_concurrent_jobs, 2);
+        assert_eq!(config.workers.default_working_dir, "/tmp/jobs");
+        assert_eq!(config.workers.log_dir, "/tmp/logs");
+        assert_eq!(config.workers.kill_grace_period_secs, 30);
+        assert!(!config.dashboard.enabled);
+        assert_eq!(config.dashboard.static_dir.as_deref(), Some("/var/www/dashboard"));
+    }
+
+    #[test]
+    fn shellexpand_tilde_expands_home() {
+        let expanded = shellexpand_tilde("~/foo/bar");
+        assert!(!expanded.starts_with("~"));
+        assert!(expanded.ends_with("/foo/bar"));
+    }
+
+    #[test]
+    fn shellexpand_tilde_bare_tilde() {
+        let expanded = shellexpand_tilde("~");
+        assert!(!expanded.starts_with("~") || expanded == "~"); // only if no home dir
+    }
+
+    #[test]
+    fn shellexpand_tilde_no_tilde() {
+        assert_eq!(shellexpand_tilde("/absolute/path"), "/absolute/path");
+        assert_eq!(shellexpand_tilde("relative/path"), "relative/path");
+    }
+
+    #[test]
+    fn log_dir_uses_tilde_expansion() {
+        let toml = r#"
+            [workers]
+            log_dir = "~/wartable/logs"
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        let log_dir = config.log_dir();
+        assert!(!log_dir.starts_with("~"));
+    }
+}

@@ -155,3 +155,139 @@ pub enum Event {
     #[serde(rename = "job_cancelled")]
     JobCancelled { job: JobInfo },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use std::collections::HashMap;
+
+    fn make_job(command: &str) -> Job {
+        Job {
+            id: "test-123".to_string(),
+            spec: JobSpec {
+                command: command.to_string(),
+                working_dir: None,
+                env: HashMap::new(),
+                resources: ResourceRequirements::default(),
+                files: Vec::new(),
+                priority: 0,
+                tags: vec!["ml".to_string(), "gpu".to_string()],
+                name: Some("test job".to_string()),
+            },
+            status: JobStatus::Running,
+            submitted_at: Utc::now(),
+            started_at: Some(Utc::now()),
+            completed_at: None,
+            exit_code: None,
+            pid: Some(1234),
+        }
+    }
+
+    #[test]
+    fn job_info_from_job() {
+        let job = make_job("echo hello");
+        let info = JobInfo::from(&job);
+
+        assert_eq!(info.job_id, "test-123");
+        assert_eq!(info.name, Some("test job".to_string()));
+        assert_eq!(info.status, JobStatus::Running);
+        assert_eq!(info.command, "echo hello");
+        assert_eq!(info.tags, vec!["ml", "gpu"]);
+        assert!(info.started_at.is_some());
+        assert!(info.completed_at.is_none());
+        assert!(info.exit_code.is_none());
+    }
+
+    #[test]
+    fn job_info_truncates_long_command() {
+        let long_cmd = "x".repeat(200);
+        let job = make_job(&long_cmd);
+        let info = JobInfo::from(&job);
+
+        assert_eq!(info.command.len(), 103); // 100 chars + "..."
+        assert!(info.command.ends_with("..."));
+    }
+
+    #[test]
+    fn job_info_short_command_not_truncated() {
+        let job = make_job("echo hi");
+        let info = JobInfo::from(&job);
+        assert_eq!(info.command, "echo hi");
+    }
+
+    #[test]
+    fn job_status_display() {
+        assert_eq!(JobStatus::Queued.to_string(), "queued");
+        assert_eq!(JobStatus::Running.to_string(), "running");
+        assert_eq!(JobStatus::Completed.to_string(), "completed");
+        assert_eq!(JobStatus::Failed.to_string(), "failed");
+        assert_eq!(JobStatus::Cancelled.to_string(), "cancelled");
+    }
+
+    #[test]
+    fn job_status_serde_roundtrip() {
+        for status in [
+            JobStatus::Queued,
+            JobStatus::Running,
+            JobStatus::Completed,
+            JobStatus::Failed,
+            JobStatus::Cancelled,
+        ] {
+            let json = serde_json::to_string(&status).unwrap();
+            let parsed: JobStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, status);
+        }
+    }
+
+    #[test]
+    fn job_status_serde_lowercase() {
+        let json = serde_json::to_string(&JobStatus::Running).unwrap();
+        assert_eq!(json, "\"running\"");
+    }
+
+    #[test]
+    fn resource_requirements_default() {
+        let r = ResourceRequirements::default();
+        assert_eq!(r.gpu_count, 0);
+        assert!(r.gpu_vram_min_gb.is_none());
+        assert!(r.cpu_cores.is_none());
+        assert!(r.ram_min_gb.is_none());
+        assert!(r.disk_min_gb.is_none());
+    }
+
+    #[test]
+    fn job_serde_roundtrip() {
+        let job = make_job("python train.py");
+        let json = serde_json::to_string(&job).unwrap();
+        let parsed: Job = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.id, job.id);
+        assert_eq!(parsed.spec.command, "python train.py");
+        assert_eq!(parsed.status, JobStatus::Running);
+        assert_eq!(parsed.pid, Some(1234));
+    }
+
+    #[test]
+    fn event_serde_tagged() {
+        let job = make_job("echo test");
+        let event = Event::JobSubmitted {
+            job: JobInfo::from(&job),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("\"type\":\"job_submitted\""));
+    }
+
+    #[test]
+    fn job_logs_skips_none_combined() {
+        let logs = JobLogs {
+            stdout: "hello\n".to_string(),
+            stderr: String::new(),
+            stdout_offset: 6,
+            stderr_offset: 0,
+            combined: None,
+            combined_offset: None,
+        };
+        let json = serde_json::to_string(&logs).unwrap();
+        assert!(!json.contains("combined"));
+    }
+}
