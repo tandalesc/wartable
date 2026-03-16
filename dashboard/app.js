@@ -19,14 +19,18 @@ function setApiKey(key) {
 }
 
 function showAuthModal() {
-    document.getElementById('auth-overlay').classList.add('visible');
+    const overlay = document.getElementById('auth-overlay');
+    overlay.style.display = 'flex';
+    overlay.classList.add('visible');
     document.getElementById('auth-error').classList.remove('visible');
     document.getElementById('auth-key-input').value = '';
     document.getElementById('auth-key-input').focus();
 }
 
 function hideAuthModal() {
-    document.getElementById('auth-overlay').classList.remove('visible');
+    const overlay = document.getElementById('auth-overlay');
+    overlay.classList.remove('visible');
+    overlay.style.display = 'none';
 }
 
 async function apiFetch(url, opts = {}) {
