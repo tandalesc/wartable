@@ -277,6 +277,134 @@ main {
 .pill:hover { color: var(--text); background: var(--bg-3); }
 .pill.active { color: var(--accent); background: var(--bg-3); border-color: var(--border); }
 
+.toolbar-sep { color: var(--text-faint); margin: 0 4px; }
+
+.toolbar-toggle {
+    cursor: pointer;
+    transition: color 0.15s;
+}
+.toolbar-toggle:hover { color: var(--text); }
+.toolbar-toggle.active { color: var(--accent); }
+
+/* ── Clients Panel ── */
+#clients-panel, #keys-panel {
+    border-bottom: 1px solid var(--border);
+    padding: 8px 16px;
+    background: var(--bg-2);
+}
+#clients-panel.hidden, #keys-panel.hidden { display: none; }
+
+.clients-list { display: flex; flex-direction: column; gap: 4px; }
+
+.client-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 8px;
+    border-radius: var(--radius);
+    font-size: 11px;
+}
+
+.client-name { color: var(--accent); font-weight: 500; min-width: 100px; }
+.client-meta { color: var(--text-dim); font-size: 10px; }
+.client-empty { color: var(--text-faint); font-size: 11px; padding: 4px 8px; }
+
+/* ── Keys Panel ── */
+.keys-header {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.key-input {
+    background: var(--bg-0);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 5px 8px;
+    outline: none;
+    width: 160px;
+}
+.key-input:focus { border-color: var(--accent); }
+
+.key-btn {
+    background: none;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 4px 10px;
+    border-radius: var(--radius);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.key-btn:hover { background: rgba(79,193,255,0.1); }
+
+.revoke-btn {
+    background: none;
+    border: 1px solid var(--red);
+    color: var(--red);
+    padding: 2px 8px;
+    border-radius: var(--radius);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.revoke-btn:hover { background: rgba(239,68,68,0.12); }
+
+#new-key-display {
+    padding: 6px 8px;
+    margin-bottom: 8px;
+    background: var(--bg-0);
+    border: 1px solid var(--green);
+    border-radius: var(--radius);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+#new-key-display.hidden { display: none; }
+
+.key-warning { font-size: 10px; color: var(--amber); }
+
+#new-key-value {
+    font-size: 11px;
+    color: var(--green);
+    word-break: break-all;
+    user-select: all;
+    cursor: text;
+}
+
+.keys-list { display: flex; flex-direction: column; gap: 4px; }
+
+.key-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.key-name { color: var(--accent); font-weight: 500; min-width: 100px; }
+.key-prefix { color: var(--text-faint); font-size: 10px; font-family: var(--font-mono); }
+.key-meta { color: var(--text-dim); font-size: 10px; }
+.key-badge {
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 1px 5px;
+    border-radius: 2px;
+    text-transform: uppercase;
+}
+.key-badge-admin { background: rgba(79,193,255,0.12); color: var(--accent); }
+.key-badge-config { background: rgba(100,116,139,0.15); color: var(--gray); }
+
 .table-wrap {
     flex: 1;
     overflow-y: auto;

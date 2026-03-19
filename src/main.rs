@@ -1,6 +1,8 @@
 mod api;
 mod config;
+mod download;
 mod events;
+mod keys;
 mod mcp;
 mod models;
 mod scheduler;
@@ -32,13 +34,14 @@ async fn main() -> anyhow::Result<()> {
     let scheduler = scheduler::start(config.clone(), event_bus.clone());
     info!("scheduler actor started");
 
-    let router = server::build_router(&config, scheduler, event_bus);
+    let (router, admin_key) = server::build_router(&config, scheduler, event_bus);
 
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     info!(addr = %addr, "wartable listening");
     info!(mcp = %format!("http://{}:{}/mcp", config.server.host, config.server.port), "MCP endpoint");
     info!(api = %format!("http://{}:{}/api", config.server.host, config.server.port), "REST API");
+    info!(admin_key = %admin_key, "admin API key (dashboard auto-configured)");
 
     axum::serve(listener, router)
         .with_graceful_shutdown(async {

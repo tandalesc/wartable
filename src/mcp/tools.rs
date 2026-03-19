@@ -1,3 +1,4 @@
+use crate::download::DownloadSigner;
 use crate::models::*;
 use crate::scheduler::{JobFilter, LogStream, SchedulerHandle};
 use base64::Engine;
@@ -94,14 +95,32 @@ pub struct DownloadFileParams {
 #[derive(Debug, Clone)]
 pub struct WartableTools {
     scheduler: SchedulerHandle,
+    signer: DownloadSigner,
+    allowed_dirs: Vec<std::path::PathBuf>,
     tool_router: ToolRouter<Self>,
 }
 
 impl WartableTools {
-    pub fn new(scheduler: SchedulerHandle) -> Self {
+    pub fn new(scheduler: SchedulerHandle, signer: DownloadSigner, allowed_dirs: Vec<std::path::PathBuf>) -> Self {
         Self {
             scheduler,
+            signer,
+            allowed_dirs,
             tool_router: Self::tool_router(),
+        }
+    }
+
+    fn is_path_allowed(&self, path: &std::path::Path) -> bool {
+        if let Ok(canonical) = std::fs::canonicalize(path) {
+            self.allowed_dirs.iter().any(|dir| canonical.starts_with(dir))
+        } else {
+            // File doesn't exist yet — check parent
+            if let Some(parent) = path.parent() {
+                if let Ok(canonical) = std::fs::canonicalize(parent) {
+                    return self.allowed_dirs.iter().any(|dir| canonical.starts_with(dir));
+                }
+            }
+            false
         }
     }
 }
@@ -221,16 +240,26 @@ impl WartableTools {
         }
     }
 
-    #[tool(description = "Upload a file to the server. Content must be base64-encoded.")]
+    #[tool(description = "Upload a file to the server. Content must be base64-encoded. Path must be under an allowed directory (working_dir or log_dir).")]
     async fn upload_file(
         &self,
         Parameters(params): Parameters<UploadFileParams>,
     ) -> String {
+        if params.path.contains("..") {
+            return r#"{"error": "Path traversal not allowed"}"#.to_string();
+        }
+
         let path = std::path::Path::new(&params.path);
+
+        // Ensure parent directory exists before checking allowed_dirs
         if let Some(parent) = path.parent() {
             if let Err(e) = tokio::fs::create_dir_all(parent).await {
                 return format!("{{\"error\": \"Failed to create directory: {}\"}}", e);
             }
+        }
+
+        if !self.is_path_allowed(path) {
+            return r#"{"error": "Path outside allowed directories"}"#.to_string();
         }
 
         let content = match base64::engine::general_purpose::STANDARD.decode(&params.content_base64) {
@@ -243,11 +272,13 @@ impl WartableTools {
         #[cfg(unix)]
         if let Some(mode_str) = &params.mode {
             if let Ok(mode) = u32::from_str_radix(mode_str, 8) {
+                // Clamp: strip setuid/setgid/sticky, cap at 0755
+                let safe_mode = mode & 0o0755;
                 use std::os::unix::fs::PermissionsExt;
                 if let Err(e) = tokio::fs::write(path, &content).await {
                     return format!("{{\"error\": \"Failed to write file: {}\"}}", e);
                 }
-                let _ = tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).await;
+                let _ = tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(safe_mode)).await;
                 return serde_json::json!({
                     "path": params.path,
                     "size_bytes": size,
@@ -264,53 +295,42 @@ impl WartableTools {
         }
     }
 
-    #[tool(description = "Download a file from the server. Images are returned as native image content. Text files are returned inline. Other files are base64-encoded. All responses include a download_url for direct HTTP access.")]
+    #[tool(description = "Get a presigned download URL for a file on the server. Returns file metadata and a time-limited URL (15 min) for direct HTTP download. No file content is returned through MCP.")]
     async fn download_file(
         &self,
         Parameters(params): Parameters<DownloadFileParams>,
     ) -> Result<CallToolResult, rmcp::ErrorData> {
-        let bytes = match tokio::fs::read(&params.path).await {
-            Ok(b) => b,
-            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Failed to read file: {}", e))])),
+        if params.path.contains("..") {
+            return Ok(CallToolResult::error(vec![Content::text("Path traversal not allowed")]));
+        }
+
+        if !self.is_path_allowed(std::path::Path::new(&params.path)) {
+            return Ok(CallToolResult::error(vec![Content::text("Path outside allowed directories")]));
+        }
+
+        let metadata = match tokio::fs::metadata(&params.path).await {
+            Ok(m) => m,
+            Err(e) => return Ok(CallToolResult::error(vec![Content::text(format!("Failed to access file: {}", e))])),
         };
+
+        if !metadata.is_file() {
+            return Ok(CallToolResult::error(vec![Content::text("Not a regular file")]));
+        }
 
         let mime = mime_guess::from_path(&params.path)
             .first_or_octet_stream()
             .to_string();
-        let download_url = format!("/api/files/{}", params.path.trim_start_matches('/'));
 
-        let meta_text = format!(
-            "path: {}\nsize: {} bytes\ntype: {}\ndownload_url: {}",
-            params.path, bytes.len(), mime, download_url
-        );
+        let download_url = self.signer.sign(&params.path);
 
-        let content = if mime.starts_with("image/") {
-            let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
-            vec![
-                Content::text(meta_text),
-                Content::image(encoded, mime),
-            ]
-        } else if mime.starts_with("text/") || mime == "application/json" || mime == "application/xml" || mime == "application/toml" {
-            match String::from_utf8(bytes) {
-                Ok(text) => vec![
-                    Content::text(meta_text),
-                    Content::text(text),
-                ],
-                Err(e) => {
-                    let encoded = base64::engine::general_purpose::STANDARD.encode(e.as_bytes());
-                    vec![
-                        Content::text(format!("{}\nNote: file is not valid UTF-8, returning base64", meta_text)),
-                        Content::text(encoded),
-                    ]
-                }
-            }
-        } else {
-            let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
-            vec![
-                Content::text(format!("{}\ncontent_base64: {}", meta_text, encoded)),
-            ]
-        };
+        let response = serde_json::json!({
+            "path": params.path,
+            "size_bytes": metadata.len(),
+            "content_type": mime,
+            "download_url": download_url,
+            "expires_in_seconds": 900,
+        });
 
-        Ok(CallToolResult::success(content))
+        Ok(CallToolResult::success(vec![Content::text(response.to_string())]))
     }
 }

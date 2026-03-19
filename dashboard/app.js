@@ -11,6 +11,8 @@ let activeFilter = 'all';
 // ── Auth ──
 
 function getApiKey() {
+    // Session cookie handles dashboard auth automatically.
+    // Manual key entry is a fallback if cookies are blocked.
     return localStorage.getItem('wartable_api_key');
 }
 
@@ -418,6 +420,127 @@ function renderGpus(gpus) {
     }
 }
 
+// ── Clients ──
+
+let clientsVisible = false;
+
+async function fetchClients() {
+    try {
+        const res = await apiFetch(`${API}/clients`);
+        const clients = await res.json();
+        document.getElementById('client-count').textContent = clients.length;
+        if (clientsVisible) renderClients(clients);
+    } catch { /* ignore */ }
+}
+
+function renderClients(clients) {
+    const list = document.getElementById('clients-list');
+    clearChildren(list);
+    if (!clients.length) {
+        list.appendChild(el('div', { className: 'client-empty' }, 'No clients connected'));
+        return;
+    }
+    for (const c of clients) {
+        list.appendChild(el('div', { className: 'client-row' },
+            el('span', { className: 'client-name' }, c.name),
+            el('span', { className: 'client-meta' }, c.request_count + ' reqs'),
+            el('span', { className: 'client-meta' }, timeAgo(c.last_seen) + ' ago'),
+        ));
+    }
+}
+
+document.getElementById('toggle-clients').addEventListener('click', () => {
+    clientsVisible = !clientsVisible;
+    const panel = document.getElementById('clients-panel');
+    const toggle = document.getElementById('toggle-clients');
+    if (clientsVisible) {
+        panel.classList.remove('hidden');
+        toggle.classList.add('active');
+        fetchClients();
+    } else {
+        panel.classList.add('hidden');
+        toggle.classList.remove('active');
+    }
+});
+
+// ── Keys ──
+
+let keysVisible = false;
+
+async function fetchKeys() {
+    try {
+        const res = await apiFetch(`${API}/keys`);
+        const keys = await res.json();
+        if (keysVisible) renderKeys(keys);
+    } catch { /* ignore */ }
+}
+
+function renderKeys(keys) {
+    const list = document.getElementById('keys-list');
+    clearChildren(list);
+    for (const k of keys) {
+        const row = el('div', { className: 'key-row' },
+            el('span', { className: 'key-name' }, k.name),
+            el('span', { className: 'key-prefix' }, k.key_prefix),
+            el('span', { className: 'key-meta' }, timeAgo(k.created_at) + ' ago'),
+        );
+        if (!k.revocable) {
+            const badge = k.name === 'admin' ? 'key-badge-admin' : 'key-badge-config';
+            row.appendChild(el('span', { className: `key-badge ${badge}` }, k.name === 'admin' ? 'admin' : 'config'));
+        } else {
+            row.appendChild(el('button', {
+                className: 'revoke-btn',
+                onclick: () => revokeKey(k.name),
+            }, 'REVOKE'));
+        }
+        list.appendChild(row);
+    }
+}
+
+async function revokeKey(name) {
+    try {
+        await apiFetch(`${API}/keys/revoke`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+        });
+        fetchKeys();
+    } catch { /* ignore */ }
+}
+
+document.getElementById('generate-key-btn').addEventListener('click', async () => {
+    const input = document.getElementById('new-key-name');
+    const name = input.value.trim();
+    if (!name) return;
+    try {
+        const res = await apiFetch(`${API}/keys/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+        });
+        const data = await res.json();
+        document.getElementById('new-key-value').textContent = data.key;
+        document.getElementById('new-key-display').classList.remove('hidden');
+        input.value = '';
+        fetchKeys();
+    } catch { /* ignore */ }
+});
+
+document.getElementById('toggle-keys').addEventListener('click', () => {
+    keysVisible = !keysVisible;
+    const panel = document.getElementById('keys-panel');
+    const toggle = document.getElementById('toggle-keys');
+    if (keysVisible) {
+        panel.classList.remove('hidden');
+        toggle.classList.add('active');
+        fetchKeys();
+    } else {
+        panel.classList.add('hidden');
+        toggle.classList.remove('active');
+        document.getElementById('new-key-display').classList.add('hidden');
+    }
+});
+
 // ── Actions ──
 
 async function cancelJob(jobId) {
@@ -488,5 +611,7 @@ window.addEventListener('resize', updateBodyScroll);
 // Go
 fetchJobs();
 fetchResources();
+fetchClients();
 setInterval(fetchJobs, 3000);
 setInterval(fetchResources, 5000);
+setInterval(fetchClients, 5000);

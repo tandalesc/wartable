@@ -5,13 +5,19 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use sysinfo::System;
 
+use crate::download::DownloadSigner;
+use crate::keys::KeyStore;
 use crate::models::*;
 use crate::scheduler::{JobFilter, LogStream, SchedulerHandle};
+use crate::server::ClientTracker;
 
 #[derive(Clone)]
 pub struct ApiState {
     pub scheduler: SchedulerHandle,
     pub allowed_dirs: Vec<PathBuf>,
+    pub signer: DownloadSigner,
+    pub client_tracker: ClientTracker,
+    pub key_store: KeyStore,
 }
 
 #[derive(Deserialize)]
@@ -204,19 +210,31 @@ pub async fn get_resources() -> Json<ResourceSnapshot> {
     Json(snapshot)
 }
 
-pub async fn get_file(
+#[derive(Deserialize)]
+pub struct DownloadQuery {
+    pub path: String,
+    pub exp: u64,
+    pub sig: String,
+}
+
+pub async fn get_download(
     State(state): State<ApiState>,
-    Path(path): Path<String>,
+    Query(q): Query<DownloadQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // Verify presigned token
+    state
+        .signer
+        .verify(&q.path, q.exp, &q.sig)
+        .map_err(|e| (StatusCode::FORBIDDEN, e.to_string()))?;
+
     // Reject path traversal
-    if path.contains("..") {
+    if q.path.contains("..") {
         return Err((StatusCode::BAD_REQUEST, "Path traversal not allowed".into()));
     }
 
-    let requested = PathBuf::from(&path);
-    let canonical = tokio::fs::canonicalize(&requested)
+    let canonical = tokio::fs::canonicalize(&q.path)
         .await
-        .map_err(|_| (StatusCode::NOT_FOUND, format!("File not found: {}", path)))?;
+        .map_err(|_| (StatusCode::NOT_FOUND, format!("File not found: {}", q.path)))?;
 
     // Verify the file is under an allowed directory
     let allowed = state
@@ -229,7 +247,7 @@ pub async fn get_file(
 
     let metadata = tokio::fs::metadata(&canonical)
         .await
-        .map_err(|_| (StatusCode::NOT_FOUND, format!("File not found: {}", path)))?;
+        .map_err(|_| (StatusCode::NOT_FOUND, format!("File not found: {}", q.path)))?;
     if !metadata.is_file() {
         return Err((StatusCode::BAD_REQUEST, "Not a regular file".into()));
     }
@@ -257,6 +275,57 @@ pub async fn get_file(
         ],
         content,
     ))
+}
+
+pub async fn list_clients(
+    State(state): State<ApiState>,
+) -> Json<Vec<crate::server::ClientInfo>> {
+    let clients = state.client_tracker.read().await;
+    let mut list: Vec<_> = clients.values().cloned().collect();
+    list.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
+    Json(list)
+}
+
+// ── Key Management ──
+
+pub async fn list_keys(
+    State(state): State<ApiState>,
+) -> Json<Vec<crate::keys::ApiKeyInfo>> {
+    Json(state.key_store.list().await)
+}
+
+#[derive(Deserialize)]
+pub struct GenerateKeyRequest {
+    pub name: String,
+}
+
+pub async fn generate_key(
+    State(state): State<ApiState>,
+    Json(req): Json<GenerateKeyRequest>,
+) -> Json<serde_json::Value> {
+    let key = state.key_store.generate(req.name).await;
+    // Return the full secret — this is the only time it's shown
+    Json(serde_json::json!({
+        "name": key.name,
+        "key": key.key,
+        "created_at": key.created_at,
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct RevokeKeyRequest {
+    pub name: String,
+}
+
+pub async fn revoke_key(
+    State(state): State<ApiState>,
+    Json(req): Json<RevokeKeyRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    match state.key_store.revoke(&req.name).await {
+        Ok(true) => Ok(Json(serde_json::json!({ "revoked": req.name }))),
+        Ok(false) => Err((StatusCode::NOT_FOUND, format!("Key not found: {}", req.name))),
+        Err(e) => Err((StatusCode::FORBIDDEN, e.to_string())),
+    }
 }
 
 fn get_gpu_info() -> Vec<GpuInfo> {

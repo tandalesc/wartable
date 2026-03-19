@@ -52,6 +52,11 @@
                 <div class="toolbar-left">
                     <span class="toolbar-title">QUEUE</span>
                     <span class="toolbar-count" id="job-count">0</span>
+                    <span class="toolbar-sep">|</span>
+                    <span class="toolbar-title toolbar-toggle" id="toggle-clients">CLIENTS</span>
+                    <span class="toolbar-count" id="client-count">0</span>
+                    <span class="toolbar-sep">|</span>
+                    <span class="toolbar-title toolbar-toggle" id="toggle-keys">KEYS</span>
                 </div>
                 <div class="toolbar-right">
                     <div class="filter-pills">
@@ -63,6 +68,20 @@
                         <button class="pill" data-status="cancelled">Cancelled</button>
                     </div>
                 </div>
+            </div>
+            <div id="clients-panel" class="hidden">
+                <div class="clients-list" id="clients-list"></div>
+            </div>
+            <div id="keys-panel" class="hidden">
+                <div class="keys-header">
+                    <input type="text" id="new-key-name" placeholder="client name" class="key-input">
+                    <button id="generate-key-btn" class="key-btn">GENERATE</button>
+                </div>
+                <div id="new-key-display" class="hidden">
+                    <span class="key-warning">Copy this key now — it won't be shown again:</span>
+                    <code id="new-key-value"></code>
+                </div>
+                <div class="keys-list" id="keys-list"></div>
             </div>
             <div class="table-wrap">
                 <table id="jobs-table">
