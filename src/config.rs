@@ -54,6 +54,8 @@ pub struct WorkerConfig {
     pub log_dir: String,
     #[serde(default = "default_kill_grace")]
     pub kill_grace_period_secs: u64,
+    #[serde(default)]
+    pub extra_allowed_dirs: Vec<String>,
 }
 
 impl Default for WorkerConfig {
@@ -62,6 +64,7 @@ impl Default for WorkerConfig {
             default_working_dir: default_working_dir(),
             log_dir: default_log_dir(),
             kill_grace_period_secs: default_kill_grace(),
+            extra_allowed_dirs: Vec::new(),
         }
     }
 }
@@ -159,6 +162,28 @@ impl Config {
     pub fn working_dir(&self) -> PathBuf {
         let expanded = shellexpand_tilde(&self.workers.default_working_dir);
         PathBuf::from(expanded)
+    }
+
+    /// All directories that file uploads/downloads are allowed to access.
+    pub fn allowed_dirs(&self) -> Vec<PathBuf> {
+        let mut dirs = Vec::new();
+        for raw in [&self.workers.log_dir, &self.workers.default_working_dir] {
+            let expanded = PathBuf::from(shellexpand_tilde(raw));
+            if let Ok(canon) = std::fs::canonicalize(&expanded) {
+                dirs.push(canon);
+            } else {
+                dirs.push(expanded);
+            }
+        }
+        for extra in &self.workers.extra_allowed_dirs {
+            let expanded = PathBuf::from(shellexpand_tilde(extra));
+            if let Ok(canon) = std::fs::canonicalize(&expanded) {
+                dirs.push(canon);
+            } else {
+                dirs.push(expanded);
+            }
+        }
+        dirs
     }
 }
 

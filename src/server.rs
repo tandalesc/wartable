@@ -39,20 +39,7 @@ pub fn build_router(
 ) -> (Router, String) {
     let signer = DownloadSigner::new();
 
-    // Build allowed_dirs for file access restrictions
-    let mut allowed_dirs = Vec::new();
-    let log_dir = config.log_dir();
-    if let Ok(canon) = std::fs::canonicalize(&log_dir) {
-        allowed_dirs.push(canon);
-    } else {
-        allowed_dirs.push(log_dir);
-    }
-    let work_dir = config.working_dir();
-    if let Ok(canon) = std::fs::canonicalize(&work_dir) {
-        allowed_dirs.push(canon);
-    } else {
-        allowed_dirs.push(work_dir);
-    }
+    let allowed_dirs = config.allowed_dirs();
 
     let scheduler_for_mcp = scheduler.clone();
     let signer_for_mcp = signer.clone();
