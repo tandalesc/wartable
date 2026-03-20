@@ -190,6 +190,7 @@ Create `~/.wartable/config.toml` to customize:
 [server]
 host = "0.0.0.0"    # listen address
 port = 9400          # listen port
+# base_url = "http://my-server:9400"  # override base URL for presigned download links
 
 [scheduler]
 max_concurrent_jobs = 8    # max parallel jobs
@@ -198,6 +199,7 @@ max_concurrent_jobs = 8    # max parallel jobs
 default_working_dir = "/opt/wartable/jobs"    # where jobs run by default
 log_dir = "/opt/wartable/logs"                # stdout/stderr capture
 kill_grace_period_secs = 10                   # SIGTERM → SIGKILL timeout
+# extra_allowed_dirs = ["~/projects"]         # additional dirs for file upload/download access
 
 [dashboard]
 enabled = true
