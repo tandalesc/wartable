@@ -4,6 +4,10 @@
   "description": "Claude Code channel for wartable job scheduler push notifications",
   "type": "module",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.0"
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "tsx": "^4.21.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }
