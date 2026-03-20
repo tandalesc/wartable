@@ -116,24 +116,22 @@ Event types: `job_submitted`, `job_started`, `job_completed`, `job_cancelled`. U
 
 The optional `wartable-channel` lets Claude Code receive job events in real-time instead of polling. When a job completes or fails, Claude sees it immediately and can act.
 
+**Requirements:** Node.js 18+ and npm.
+
 **Setup:**
 
 ```bash
-cd channel && bun install
+cd channel && npm install
 ```
 
-Add to `~/.claude/mcp.json` alongside the existing wartable MCP entry:
+Add the channel to your project's `.mcp.json` (or use `claude mcp add`):
 
 ```json
 {
   "mcpServers": {
-    "wartable": {
-      "type": "streamable-http",
-      "url": "http://<server-ip>:9400/mcp"
-    },
     "wartable-channel": {
-      "command": "bun",
-      "args": ["<path-to>/wartable/channel/wartable-channel.ts"],
+      "command": "npx",
+      "args": ["tsx", "<path-to>/wartable/channel/wartable-channel.ts"],
       "env": {
         "WARTABLE_URL": "http://<server-ip>:9400",
         "WARTABLE_API_KEY": "<key-if-auth-enabled>"
@@ -143,7 +141,13 @@ Add to `~/.claude/mcp.json` alongside the existing wartable MCP entry:
 }
 ```
 
-Start Claude Code with the development channel flag:
+Or via the CLI:
+
+```bash
+claude mcp add wartable-channel -s project -- npx tsx <path-to>/wartable/channel/wartable-channel.ts
+```
+
+Then start Claude Code with the development channel flag:
 
 ```bash
 claude --dangerously-load-development-channels server:wartable-channel
