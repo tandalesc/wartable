@@ -51,7 +51,7 @@ ExecStart=/usr/local/bin/wartable
 Restart=on-failure
 RestartSec=5
 Environment=RUST_LOG=info
-Environment=HOME=$WARTABLE_DIR
+Environment=HOME=$(getent passwd "$WARTABLE_USER" | cut -d: -f6)
 
 [Install]
 WantedBy=multi-user.target
@@ -110,7 +110,8 @@ echo ":: status"
 sudo systemctl status wartable --no-pager
 echo ""
 echo "done — http://$(hostname -I | awk '{print $1}'):9400"
+WARTABLE_HOME="$(getent passwd "$WARTABLE_USER" | cut -d: -f6)"
 echo "jobs run as: $WARTABLE_USER"
 echo "working dir: $WARTABLE_DIR/jobs"
 echo "logs:        $WARTABLE_DIR/logs"
-echo "config:      $WARTABLE_DIR/.wartable/config.toml"
+echo "config:      $WARTABLE_HOME/.wartable/config.toml"
