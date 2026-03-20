@@ -24,6 +24,7 @@ interface LogSubscription {
   jobId: string;
   intervalMs: number;
   tailLines: number;
+  pattern: RegExp | null;
   offset: number;
   timer: ReturnType<typeof setInterval>;
 }
@@ -65,24 +66,34 @@ async function pollLogs(sub: LogSubscription) {
 
     // Only push if there's new content
     if (newOffset > sub.offset) {
-      // Build a readable summary of new lines
-      let content: string;
+      let lines: string[];
       if (logs.combined && logs.combined.length > 0) {
-        const lines = logs.combined.slice(-sub.tailLines);
-        content = lines.map((l: any) => `[${l.stream}] ${l.line}`).join("\n");
+        lines = logs.combined.map((l: any) => `[${l.stream}] ${l.line}`);
       } else {
         const parts: string[] = [];
-        if (logs.stdout?.trim()) parts.push(logs.stdout.trim());
-        if (logs.stderr?.trim()) parts.push(`[stderr] ${logs.stderr.trim()}`);
-        content = parts.join("\n");
-        // Trim to tail_lines
-        const allLines = content.split("\n");
-        if (allLines.length > sub.tailLines) {
-          content = allLines.slice(-sub.tailLines).join("\n");
-        }
+        if (logs.stdout?.trim()) parts.push(...logs.stdout.trim().split("\n"));
+        if (logs.stderr?.trim())
+          parts.push(
+            ...logs.stderr
+              .trim()
+              .split("\n")
+              .map((l: string) => `[stderr] ${l}`)
+          );
+        lines = parts;
       }
 
+      // Apply pattern filter if set
+      if (sub.pattern) {
+        lines = lines.filter((l) => sub.pattern!.test(l));
+      }
+
+      // Always advance the offset even if no lines matched
       sub.offset = newOffset;
+
+      // Only push if there are matching lines
+      if (lines.length === 0) return;
+
+      const content = lines.slice(-sub.tailLines).join("\n");
 
       await mcp.notification({
         method: "notifications/claude/channel",
@@ -170,7 +181,7 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "subscribe_job_logs",
       description:
-        "Subscribe to log updates for a running job. New output will be pushed as channel notifications at the specified interval.",
+        "Subscribe to log updates for a running job. New output will be pushed as channel notifications at the specified interval. Optionally filter to lines matching a regex pattern.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -187,6 +198,11 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: "number",
             description:
               "Max lines to include per update (default: 50)",
+          },
+          pattern: {
+            type: "string",
+            description:
+              'Regex pattern to filter log lines (e.g. "Epoch|loss|accuracy"). Only matching lines are pushed. Omit to get all lines.',
           },
         },
         required: ["job_id"],
@@ -224,6 +240,21 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     const jobId = (args as any).job_id as string;
     const intervalSecs = (args as any).interval_seconds ?? 300;
     const tailLines = (args as any).tail_lines ?? 50;
+    const patternStr = (args as any).pattern as string | undefined;
+
+    let pattern: RegExp | null = null;
+    if (patternStr) {
+      try {
+        pattern = new RegExp(patternStr, "i");
+      } catch {
+        return {
+          content: [
+            { type: "text" as const, text: `Invalid regex pattern: ${patternStr}` },
+          ],
+          isError: true,
+        };
+      }
+    }
 
     // Check job exists
     const res = await fetch(`${WARTABLE_URL}/api/jobs/${jobId}`, {
@@ -256,6 +287,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       jobId,
       intervalMs,
       tailLines,
+      pattern,
       offset: 0,
       timer: setInterval(() => pollLogs(sub), intervalMs),
     };
@@ -268,7 +300,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       content: [
         {
           type: "text" as const,
-          text: `Subscribed to logs for job ${jobId} (every ${intervalSecs}s, last ${tailLines} lines per update). Will auto-stop when job completes.`,
+          text: `Subscribed to logs for job ${jobId} (every ${intervalSecs}s, last ${tailLines} lines per update${pattern ? `, filter: /${patternStr}/i` : ""}). Will auto-stop when job completes.`,
         },
       ],
     };
@@ -306,6 +338,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       job_id: s.jobId,
       interval_seconds: s.intervalMs / 1000,
       tail_lines: s.tailLines,
+      pattern: s.pattern?.source ?? null,
       current_offset: s.offset,
     }));
     return {
