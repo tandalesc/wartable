@@ -1,0 +1,9 @@
+{
+  "name": "wartable-channel",
+  "version": "0.0.1",
+  "description": "Claude Code channel for wartable job scheduler push notifications",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0"
+  }
+}

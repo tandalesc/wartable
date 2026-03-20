@@ -1,11 +1,16 @@
 use axum::extract::{Path, Query, State};
 use axum::http::{header, StatusCode};
+use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::{IntoResponse, Json};
+use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use sysinfo::System;
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
 
 use crate::download::DownloadSigner;
+use crate::events::EventBus;
 use crate::keys::KeyStore;
 use crate::models::*;
 use crate::scheduler::{JobFilter, LogStream, SchedulerHandle};
@@ -18,6 +23,7 @@ pub struct ApiState {
     pub signer: DownloadSigner,
     pub client_tracker: ClientTracker,
     pub key_store: KeyStore,
+    pub event_bus: EventBus,
 }
 
 #[derive(Deserialize)]
@@ -326,6 +332,26 @@ pub async fn revoke_key(
         Ok(false) => Err((StatusCode::NOT_FOUND, format!("Key not found: {}", req.name))),
         Err(e) => Err((StatusCode::FORBIDDEN, e.to_string())),
     }
+}
+
+pub async fn event_stream(
+    State(state): State<ApiState>,
+) -> Sse<impl Stream<Item = Result<SseEvent, std::convert::Infallible>>> {
+    let rx = state.event_bus.subscribe();
+    let stream = BroadcastStream::new(rx).filter_map(|result| match result {
+        Ok(event) => {
+            let event_type = match &event {
+                Event::JobSubmitted { .. } => "job_submitted",
+                Event::JobStarted { .. } => "job_started",
+                Event::JobCompleted { .. } => "job_completed",
+                Event::JobCancelled { .. } => "job_cancelled",
+            };
+            let data = serde_json::to_string(&event).ok()?;
+            Some(Ok(SseEvent::default().event(event_type).data(data)))
+        }
+        Err(_) => None,
+    });
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 fn get_gpu_info() -> Vec<GpuInfo> {

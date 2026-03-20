@@ -35,7 +35,7 @@ pub type ClientTracker = Arc<RwLock<HashMap<String, ClientInfo>>>;
 pub fn build_router(
     config: &Config,
     scheduler: SchedulerHandle,
-    _event_bus: EventBus,
+    event_bus: EventBus,
 ) -> (Router, String) {
     let signer = DownloadSigner::new(config.base_url());
 
@@ -74,6 +74,7 @@ pub fn build_router(
         signer,
         client_tracker: client_tracker.clone(),
         key_store: key_store.clone(),
+        event_bus,
     };
 
     // REST API for dashboard
@@ -88,6 +89,7 @@ pub fn build_router(
         .route("/keys", get(api::list_keys))
         .route("/keys/generate", post(api::generate_key))
         .route("/keys/revoke", post(api::revoke_key))
+        .route("/events", get(api::event_stream))
         .with_state(api_state);
 
     let auth_enabled = config.auth.enabled;

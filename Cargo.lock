@@ -1458,6 +1458,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -1707,6 +1708,7 @@ dependencies = [
  "sha2",
  "sysinfo",
  "tokio",
+ "tokio-stream",
  "toml",
  "tower-http",
  "tracing",

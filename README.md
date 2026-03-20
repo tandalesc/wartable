@@ -96,6 +96,60 @@ The dashboard is backed by a REST API available at the same address:
 | `GET /api/keys` | List API keys (secrets masked) |
 | `POST /api/keys/generate` | Generate a new API key (`{"name": "..."}`) |
 | `POST /api/keys/revoke` | Revoke a runtime-generated key (`{"name": "..."}`) |
+| `GET /api/events` | SSE event stream — real-time job lifecycle events |
+
+### SSE Event Stream
+
+`GET /api/events` returns a Server-Sent Events stream of job lifecycle events. Each event has a named type and a JSON data payload:
+
+```
+event: job_submitted
+data: {"type":"job_submitted","job":{"job_id":"...","status":"queued",...}}
+
+event: job_completed
+data: {"type":"job_completed","job":{"job_id":"...","status":"completed","exit_code":0,...}}
+```
+
+Event types: `job_submitted`, `job_started`, `job_completed`, `job_cancelled`. Useful for building integrations that react to job state changes without polling.
+
+### Claude Code Channel (push notifications)
+
+The optional `wartable-channel` lets Claude Code receive job events in real-time instead of polling. When a job completes or fails, Claude sees it immediately and can act.
+
+**Setup:**
+
+```bash
+cd channel && bun install
+```
+
+Add to `~/.claude/mcp.json` alongside the existing wartable MCP entry:
+
+```json
+{
+  "mcpServers": {
+    "wartable": {
+      "type": "streamable-http",
+      "url": "http://<server-ip>:9400/mcp"
+    },
+    "wartable-channel": {
+      "command": "bun",
+      "args": ["<path-to>/wartable/channel/wartable-channel.ts"],
+      "env": {
+        "WARTABLE_URL": "http://<server-ip>:9400",
+        "WARTABLE_API_KEY": "<key-if-auth-enabled>"
+      }
+    }
+  }
+}
+```
+
+Start Claude Code with the development channel flag:
+
+```bash
+claude --dangerously-load-development-channels server:wartable-channel
+```
+
+Claude will receive `<channel source="wartable-channel" event="job_completed" job_id="..." ...>` tags automatically when job state changes. It can then use the existing wartable MCP tools to investigate, resubmit, or take action.
 
 ## Job Features
 

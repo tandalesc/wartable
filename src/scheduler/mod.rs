@@ -437,8 +437,10 @@ mod tests {
                 default_working_dir: "/tmp/wartable-test-jobs".to_string(),
                 log_dir: "/tmp/wartable-test-logs".to_string(),
                 kill_grace_period_secs: 5,
+                extra_allowed_dirs: Vec::new(),
             },
             dashboard: crate::config::DashboardConfig::default(),
+            auth: crate::config::AuthConfig::default(),
         }
     }
 
