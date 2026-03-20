@@ -10,12 +10,16 @@ const DEFAULT_TTL_SECS: u64 = 900; // 15 minutes
 #[derive(Clone, Debug)]
 pub struct DownloadSigner {
     key: Arc<Vec<u8>>,
+    base_url: Arc<String>,
 }
 
 impl DownloadSigner {
-    pub fn new() -> Self {
+    pub fn new(base_url: String) -> Self {
         let key: Vec<u8> = (0..32).map(|_| rand::random::<u8>()).collect();
-        Self { key: Arc::new(key) }
+        Self {
+            key: Arc::new(key),
+            base_url: Arc::new(base_url),
+        }
     }
 
     /// Generate a presigned download URL for the given file path.
@@ -28,7 +32,7 @@ impl DownloadSigner {
 
         let sig = self.compute_sig(path, exp);
         let encoded_path = urlencoding::encode(path);
-        format!("/api/dl?path={}&exp={}&sig={}", encoded_path, exp, sig)
+        format!("{}/api/dl?path={}&exp={}&sig={}", self.base_url, encoded_path, exp, sig)
     }
 
     /// Verify a presigned token. Returns the file path if valid.

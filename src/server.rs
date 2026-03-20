@@ -37,7 +37,7 @@ pub fn build_router(
     scheduler: SchedulerHandle,
     _event_bus: EventBus,
 ) -> (Router, String) {
-    let signer = DownloadSigner::new();
+    let signer = DownloadSigner::new(config.base_url());
 
     let allowed_dirs = config.allowed_dirs();
 

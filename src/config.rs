@@ -21,6 +21,8 @@ pub struct ServerConfig {
     pub host: String,
     #[serde(default = "default_port")]
     pub port: u16,
+    /// Base URL for presigned download links. Defaults to http://{host}:{port}.
+    pub base_url: Option<String>,
 }
 
 impl Default for ServerConfig {
@@ -28,6 +30,7 @@ impl Default for ServerConfig {
         Self {
             host: default_host(),
             port: default_port(),
+            base_url: None,
         }
     }
 }
@@ -157,6 +160,23 @@ impl Config {
     pub fn log_dir(&self) -> PathBuf {
         let expanded = shellexpand_tilde(&self.workers.log_dir);
         PathBuf::from(expanded)
+    }
+
+    pub fn base_url(&self) -> String {
+        if let Some(url) = &self.server.base_url {
+            url.trim_end_matches('/').to_string()
+        } else {
+            let host = if self.server.host == "0.0.0.0" || self.server.host == "::" {
+                // Resolve machine hostname for usable URLs
+                hostname::get()
+                    .ok()
+                    .and_then(|h| h.into_string().ok())
+                    .unwrap_or_else(|| "localhost".into())
+            } else {
+                self.server.host.clone()
+            };
+            format!("http://{}:{}", host, self.server.port)
+        }
     }
 
     pub fn working_dir(&self) -> PathBuf {
