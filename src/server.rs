@@ -83,6 +83,7 @@ pub fn build_router(
         .route("/jobs/{id}", get(api::get_job))
         .route("/jobs/{id}/logs", get(api::get_job_logs))
         .route("/jobs/{id}/cancel", post(api::cancel_job))
+        .route("/jobs/{id}/retry", post(api::retry_job))
         .route("/resources", get(api::get_resources))
         .route("/dl", get(api::get_download))
         .route("/clients", get(api::list_clients))

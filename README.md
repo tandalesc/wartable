@@ -42,14 +42,28 @@ Add to your MCP config (project `.mcp.json` or user-level):
 {
   "mcpServers": {
     "wartable": {
-      "type": "streamable-http",
+      "type": "http",
       "url": "http://<server-ip>:9400/mcp"
     }
   }
 }
 ```
 
-If auth is enabled, add `"headers": { "Authorization": "Bearer <key>" }`. Generate keys from the dashboard's **KEYS** panel.
+If auth is enabled, add a `headers` field with your API key. Generate keys from the dashboard's **KEYS** panel:
+
+```json
+{
+  "mcpServers": {
+    "wartable": {
+      "type": "http",
+      "url": "http://<server-ip>:9400/mcp",
+      "headers": {
+        "Authorization": "Bearer <key>"
+      }
+    }
+  }
+}
+```
 
 Restart Claude Code and you'll have `submit_job`, `list_jobs`, `get_job_status`, `get_job_logs`, `cancel_job`, `upload_file`, and `download_file`.
 
@@ -110,6 +124,11 @@ port = 9400
 [scheduler]
 max_concurrent_jobs = 8
 
+[scheduler.gpu]
+# policy = "least-loaded"               # or "packed"
+# device_env_var = "CUDA_VISIBLE_DEVICES"
+# vram_gb = [22.0, 22.0]                # override per-device VRAM budget (GB)
+
 [workers]
 default_working_dir = "/opt/wartable/jobs"
 log_dir = "/opt/wartable/logs"
@@ -117,7 +136,7 @@ kill_grace_period_secs = 10
 # extra_allowed_dirs = ["~/projects"]
 
 [auth]
-enabled = false
+enabled = true  # default; set to false to disable
 # api_keys = [{ name = "my-client", key = "wt-secret" }]
 
 [dashboard]
@@ -126,13 +145,42 @@ enabled = true
 
 ### Authentication
 
-When `[auth] enabled = true`, all routes require an API key. The dashboard auto-authenticates via session cookie. Generate keys for MCP clients from the dashboard's **KEYS** panel, or pre-configure them in `config.toml`.
+Auth is **enabled by default**. All routes require an API key. The dashboard auto-authenticates via session cookie (an admin key is printed to stdout on startup). Generate keys for MCP clients from the dashboard's **KEYS** panel, or pre-configure them in `config.toml`. Set `[auth] enabled = false` to disable.
 
 ### Permissions
 
 Jobs run as the wartable process owner. The deploy script creates a `wartable` system user by default. Use `WARTABLE_USER=myuser ./deploy.sh` to run as a different user. If running manually (`cargo run`), jobs use your current user.
 
 For GPU access, the deploy script adds the user to `video` and `render` groups automatically.
+
+### GPU Scheduling
+
+Jobs can request GPU resources via `gpu_count` and `gpu_vram_min_gb` in their resource requirements. The scheduler tracks a per-device VRAM **budget** (not live usage) and only dispatches a job when enough headroom exists.
+
+When a job is dispatched, the scheduler injects `CUDA_VISIBLE_DEVICES` (configurable via `device_env_var`) so the process only sees its assigned GPUs. VRAM budgets are released when the job completes, fails, or is cancelled.
+
+**Policies:**
+
+| Policy | Behavior |
+|---|---|
+| `least-loaded` (default) | Picks GPUs with the most free VRAM budget. Spreads work to reduce contention. |
+| `packed` | Fills lowest-indexed GPU first. Keeps some GPUs idle for interactive use. |
+
+**Example — submitting a job that needs 8 GB VRAM on 1 GPU:**
+
+```json
+{
+  "command": "python train.py",
+  "gpu_count": 1,
+  "gpu_vram_min_gb": 8.0
+}
+```
+
+The scheduler will pick a GPU with at least 8 GB of free budget, set `CUDA_VISIBLE_DEVICES=<idx>`, and reserve 8 GB against that device until the job finishes.
+
+**Overriding VRAM budgets:** By default, total VRAM per GPU is auto-detected via NVML. Use `[scheduler.gpu] vram_gb` to cap or override (e.g., to leave headroom for the desktop compositor). If NVML is unavailable and `vram_gb` is not set, GPU budget enforcement is skipped and jobs will dispatch without GPU restrictions.
+
+**Custom device env var:** Some frameworks use different env vars (e.g., `HIP_VISIBLE_DEVICES` for ROCm). Set `device_env_var` accordingly.
 
 ## Architecture
 

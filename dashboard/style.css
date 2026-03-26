@@ -602,6 +602,81 @@ tbody tr.selected { background: var(--bg-3); }
 .meta-label { color: var(--text-faint); font-weight: 500; }
 .meta-value { color: var(--text-dim); word-break: break-all; }
 
+.meta-cmd {
+    position: relative;
+}
+
+.meta-cmd .cmd-text {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.5;
+}
+
+.meta-cmd.collapsed .cmd-text {
+    max-height: 2.4em;
+    overflow: hidden;
+}
+
+.meta-cmd .cmd-text:not(.collapsed *) {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.cmd-toggle {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    padding: 2px 0;
+    margin-top: 2px;
+    display: block;
+}
+
+#detail-actions {
+    display: flex;
+    gap: 6px;
+    padding: 6px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+#detail-actions:empty { display: none; }
+
+.action-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.action-btn:hover { color: var(--text); background: var(--bg-3); }
+
+.retry-btn { border-color: var(--green); color: var(--green); }
+.retry-btn:hover { background: rgba(52,211,153,0.1); }
+
+.cancel-detail-btn { border-color: var(--red); color: var(--red); }
+.cancel-detail-btn:hover { background: rgba(239,68,68,0.12); }
+
+.log-right-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 #log-controls {
     padding: 6px 16px;
     display: flex;

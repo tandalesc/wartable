@@ -113,16 +113,20 @@
                 <button id="close-detail" aria-label="Close">&times;</button>
             </div>
             <div id="detail-meta"></div>
+            <div id="detail-actions"></div>
             <div id="log-controls">
                 <div class="log-tabs">
                     <button class="log-tab active" data-stream="both">Combined</button>
                     <button class="log-tab" data-stream="stdout">stdout</button>
                     <button class="log-tab" data-stream="stderr">stderr</button>
                 </div>
-                <label class="follow-toggle">
-                    <input type="checkbox" id="log-follow" checked>
-                    <span>Follow</span>
-                </label>
+                <div class="log-right-controls">
+                    <button id="copy-logs-btn" class="action-btn" title="Copy log output">COPY</button>
+                    <label class="follow-toggle">
+                        <input type="checkbox" id="log-follow" checked>
+                        <span>Follow</span>
+                    </label>
+                </div>
             </div>
             <pre id="log-output"></pre>
         </div>

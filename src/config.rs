@@ -39,14 +39,85 @@ impl Default for ServerConfig {
 pub struct SchedulerConfig {
     #[serde(default = "default_max_concurrent")]
     pub max_concurrent_jobs: usize,
+    #[serde(default)]
+    pub gpu: GpuSchedulerConfig,
 }
 
 impl Default for SchedulerConfig {
     fn default() -> Self {
         Self {
             max_concurrent_jobs: default_max_concurrent(),
+            gpu: GpuSchedulerConfig::default(),
         }
     }
+}
+
+/// GPU-aware scheduling configuration.
+///
+/// When a job specifies `gpu_count` and/or `gpu_vram_min_gb` in its resource
+/// requirements, the scheduler tracks a per-device VRAM budget and only
+/// dispatches the job when enough headroom exists.
+///
+/// # Device assignment
+///
+/// The scheduler selects `gpu_count` devices whose remaining VRAM budget
+/// can accommodate the job's `gpu_vram_min_gb` request, then injects
+/// `CUDA_VISIBLE_DEVICES` (or whatever `device_env_var` is set to) into
+/// the job's environment so the process only sees the assigned GPUs.
+///
+/// # Policies
+///
+/// - `"least-loaded"` (default) — picks GPUs with the most free VRAM budget.
+///   Spreads work across GPUs to reduce contention.
+/// - `"packed"` — fills the lowest-indexed GPU first. Useful when you want
+///   to keep some GPUs entirely idle for interactive use.
+///
+/// # VRAM budgets
+///
+/// By default, total VRAM per GPU is auto-detected via NVML at startup.
+/// Use `vram_gb` to override (e.g., to cap advertised VRAM below the
+/// physical amount, or on systems without NVML).
+///
+/// # Example config
+///
+/// ```toml
+/// [scheduler.gpu]
+/// policy = "least-loaded"       # or "packed"
+/// device_env_var = "CUDA_VISIBLE_DEVICES"
+/// # vram_gb = [22.0, 22.0]     # override per-device VRAM budget (GB)
+/// ```
+#[derive(Debug, Clone, Deserialize)]
+pub struct GpuSchedulerConfig {
+    /// Per-device VRAM budget in GB. Auto-detected from NVML when absent.
+    /// Length determines GPU count if NVML is unavailable.
+    #[serde(default)]
+    pub vram_gb: Option<Vec<f64>>,
+
+    /// Assignment policy: "least-loaded" (default) or "packed".
+    #[serde(default = "default_gpu_policy")]
+    pub policy: String,
+
+    /// Environment variable injected with assigned GPU indices (default: CUDA_VISIBLE_DEVICES).
+    #[serde(default = "default_device_env_var")]
+    pub device_env_var: String,
+}
+
+impl Default for GpuSchedulerConfig {
+    fn default() -> Self {
+        Self {
+            vram_gb: None,
+            policy: default_gpu_policy(),
+            device_env_var: default_device_env_var(),
+        }
+    }
+}
+
+fn default_gpu_policy() -> String {
+    "least-loaded".to_string()
+}
+
+fn default_device_env_var() -> String {
+    "CUDA_VISIBLE_DEVICES".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -99,7 +170,7 @@ pub struct AuthConfig {
 impl Default for AuthConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             api_keys: Vec::new(),
         }
     }

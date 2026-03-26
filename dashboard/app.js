@@ -157,7 +157,7 @@ function updateSortIndicators() {
 // ── Job List ──
 
 async function fetchJobs() {
-    const params = activeFilter !== 'all' ? `?status=${activeFilter}` : '';
+    const params = activeFilter !== 'all' ? `?status=${activeFilter}` : '?limit=200';
     try {
         const res = await apiFetch(`${API}/jobs${params}`);
         currentJobs = await res.json();
@@ -313,12 +313,49 @@ function renderDetail(job) {
         meta.appendChild(el('span', { className: 'meta-value' }, value));
     };
 
+    const addCmd = (command) => {
+        meta.appendChild(el('span', { className: 'meta-label' }, 'CMD'));
+        const cmdVal = el('span', { className: 'meta-value meta-cmd collapsed' });
+        const cmdText = el('pre', { className: 'cmd-text' }, command);
+        cmdVal.appendChild(cmdText);
+        if (command.length > 120 || command.split('\n').length > 2) {
+            const toggle = el('button', {
+                className: 'cmd-toggle',
+                onclick: (e) => {
+                    e.stopPropagation();
+                    cmdVal.classList.toggle('collapsed');
+                    toggle.textContent = cmdVal.classList.contains('collapsed') ? 'expand' : 'collapse';
+                }
+            }, 'expand');
+            cmdVal.appendChild(toggle);
+        } else {
+            cmdVal.classList.remove('collapsed');
+        }
+        meta.appendChild(cmdVal);
+    };
+
     add('ID', job.id);
-    add('CMD', job.spec.command);
+    addCmd(job.spec.command);
     if (job.started_at) add('STARTED', new Date(job.started_at).toLocaleString());
     if (job.completed_at) add('ENDED', new Date(job.completed_at).toLocaleString());
     if (job.exit_code !== null && job.exit_code !== undefined) add('EXIT', String(job.exit_code));
     if (job.spec.tags && job.spec.tags.length) add('TAGS', job.spec.tags.join(', '));
+
+    // Action buttons
+    const actions = document.getElementById('detail-actions');
+    clearChildren(actions);
+    if (['failed', 'cancelled', 'completed'].includes(job.status)) {
+        actions.appendChild(el('button', {
+            className: 'action-btn retry-btn',
+            onclick: () => retryJob(job.id),
+        }, 'RETRY'));
+    }
+    if (['queued', 'running'].includes(job.status)) {
+        actions.appendChild(el('button', {
+            className: 'action-btn cancel-detail-btn',
+            onclick: () => cancelJob(job.id),
+        }, 'KILL'));
+    }
 }
 
 // ── Logs ──
@@ -548,6 +585,26 @@ async function cancelJob(jobId) {
     fetchJobs();
 }
 
+async function retryJob(jobId) {
+    try {
+        const res = await apiFetch(`${API}/jobs/${jobId}/retry`, { method: 'POST' });
+        const data = await res.json();
+        fetchJobs();
+        selectJob(data.new_job_id);
+    } catch { /* ignore */ }
+}
+
+function copyLogs() {
+    const output = document.getElementById('log-output');
+    const text = output.textContent;
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copy-logs-btn');
+        btn.textContent = 'COPIED';
+        setTimeout(() => { btn.textContent = 'COPY'; }, 1500);
+    });
+}
+
 // ── Helpers ──
 
 function timeAgo(ts) {
@@ -596,6 +653,9 @@ document.querySelectorAll('.log-tab').forEach(tab => {
         pollLogs();
     });
 });
+
+// Copy logs
+document.getElementById('copy-logs-btn').addEventListener('click', copyLogs);
 
 // Close detail
 document.getElementById('close-detail').onclick = () => {
