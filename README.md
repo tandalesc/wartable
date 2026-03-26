@@ -36,20 +36,7 @@ docker compose up -d --build
 
 ## Claude Code Setup
 
-Add to your MCP config (project `.mcp.json` or user-level):
-
-```json
-{
-  "mcpServers": {
-    "wartable": {
-      "type": "http",
-      "url": "http://<server-ip>:9400/mcp"
-    }
-  }
-}
-```
-
-If auth is enabled, add a `headers` field with your API key. Generate keys from the dashboard's **KEYS** panel:
+Add to your MCP config (project `.mcp.json` or user-level). Generate an API key from the dashboard's **KEYS** panel (an admin key is printed to stdout on first startup):
 
 ```json
 {
@@ -66,6 +53,8 @@ If auth is enabled, add a `headers` field with your API key. Generate keys from 
 ```
 
 Restart Claude Code and you'll have `submit_job`, `list_jobs`, `get_job_status`, `get_job_logs`, `cancel_job`, `upload_file`, and `download_file`.
+
+> To disable auth, set `[auth] enabled = false` in `config.toml` and drop the `headers` field.
 
 ## Push Notifications (Channel)
 
@@ -99,8 +88,6 @@ Then edit `.mcp.json` to add the `env` block with your server URL and API key:
   }
 }
 ```
-
-`WARTABLE_API_KEY` is required when auth is enabled (the default). Generate a key from the dashboard's **KEYS** panel.
 
 Start Claude Code with the channel enabled:
 
@@ -139,16 +126,14 @@ kill_grace_period_secs = 10
 # extra_allowed_dirs = ["~/projects"]
 
 [auth]
-enabled = true  # default; set to false to disable
+# enabled = true                         # disable with: enabled = false
 # api_keys = [{ name = "my-client", key = "wt-secret" }]
 
 [dashboard]
 enabled = true
 ```
 
-### Authentication
-
-Auth is **enabled by default**. All routes require an API key. The dashboard auto-authenticates via session cookie (an admin key is printed to stdout on startup). Generate keys for MCP clients from the dashboard's **KEYS** panel, or pre-configure them in `config.toml`. Set `[auth] enabled = false` to disable.
+Auth is on by default — all routes require an API key. The dashboard auto-authenticates via session cookie. An admin key is printed to stdout on first startup; generate additional keys from the dashboard's **KEYS** panel or pre-configure them in `config.toml`.
 
 ### Permissions
 
