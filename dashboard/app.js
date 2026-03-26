@@ -478,9 +478,12 @@ function renderClients(clients) {
         return;
     }
     for (const c of clients) {
+        const rph = c.requests_per_hour != null
+            ? (c.requests_per_hour < 10 ? c.requests_per_hour.toFixed(1) : Math.round(c.requests_per_hour))
+            : '?';
         list.appendChild(el('div', { className: 'client-row' },
             el('span', { className: 'client-name' }, c.name),
-            el('span', { className: 'client-meta' }, c.request_count + ' reqs'),
+            el('span', { className: 'client-meta' }, rph + ' req/hr'),
             el('span', { className: 'client-meta' }, timeAgo(c.last_seen) + ' ago'),
         ));
     }
