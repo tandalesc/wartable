@@ -127,13 +127,18 @@ kill_grace_period_secs = 10
 
 [auth]
 # enabled = true                         # disable with: enabled = false
-# api_keys = [{ name = "my-client", key = "wt-secret" }]
+api_keys = [
+  { name = "claude", key = "wt-my-secret-key" },
+  # { name = "channel", key = "wt-another-key" },
+]
 
 [dashboard]
 enabled = true
 ```
 
-Auth is on by default — all routes require an API key. The dashboard auto-authenticates via session cookie. An admin key is printed to stdout on first startup; generate additional keys from the dashboard's **KEYS** panel or pre-configure them in `config.toml`.
+Auth is on by default — all routes require an API key. The dashboard auto-authenticates via session cookie. An admin key is printed to stdout on first startup.
+
+You can pre-configure static keys in `config.toml` (as shown above) or generate them from the dashboard's **KEYS** panel. Use the same key value in your MCP config's `Authorization` header and/or `WARTABLE_API_KEY` env var for the channel.
 
 ### Permissions
 
