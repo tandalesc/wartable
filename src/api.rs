@@ -107,6 +107,35 @@ pub async fn cancel_job(
     }
 }
 
+pub async fn retry_job(
+    State(state): State<ApiState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let job = state
+        .scheduler
+        .get_job(job_id.clone())
+        .await
+        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Job not found: {}", job_id)))?;
+
+    match job.status {
+        JobStatus::Failed | JobStatus::Cancelled | JobStatus::Completed => {}
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("Cannot retry job in status: {}", job.status),
+            ));
+        }
+    }
+
+    let (new_job_id, position) = state.scheduler.submit_job(job.spec).await;
+    Ok(Json(serde_json::json!({
+        "original_job_id": job_id,
+        "new_job_id": new_job_id,
+        "status": "queued",
+        "position_in_queue": position,
+    })))
+}
+
 #[derive(Serialize)]
 pub struct ResourceSnapshot {
     pub cpu: CpuInfo,

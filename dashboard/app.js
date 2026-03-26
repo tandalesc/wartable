@@ -157,7 +157,7 @@ function updateSortIndicators() {
 // ── Job List ──
 
 async function fetchJobs() {
-    const params = activeFilter !== 'all' ? `?status=${activeFilter}` : '';
+    const params = activeFilter !== 'all' ? `?status=${activeFilter}` : '?limit=200';
     try {
         const res = await apiFetch(`${API}/jobs${params}`);
         currentJobs = await res.json();
@@ -313,12 +313,49 @@ function renderDetail(job) {
         meta.appendChild(el('span', { className: 'meta-value' }, value));
     };
 
+    const addCmd = (command) => {
+        meta.appendChild(el('span', { className: 'meta-label' }, 'CMD'));
+        const cmdVal = el('span', { className: 'meta-value meta-cmd collapsed' });
+        const cmdText = el('pre', { className: 'cmd-text' }, command);
+        cmdVal.appendChild(cmdText);
+        if (command.length > 120 || command.split('\n').length > 2) {
+            const toggle = el('button', {
+                className: 'cmd-toggle',
+                onclick: (e) => {
+                    e.stopPropagation();
+                    cmdVal.classList.toggle('collapsed');
+                    toggle.textContent = cmdVal.classList.contains('collapsed') ? 'expand' : 'collapse';
+                }
+            }, 'expand');
+            cmdVal.appendChild(toggle);
+        } else {
+            cmdVal.classList.remove('collapsed');
+        }
+        meta.appendChild(cmdVal);
+    };
+
     add('ID', job.id);
-    add('CMD', job.spec.command);
+    addCmd(job.spec.command);
     if (job.started_at) add('STARTED', new Date(job.started_at).toLocaleString());
     if (job.completed_at) add('ENDED', new Date(job.completed_at).toLocaleString());
     if (job.exit_code !== null && job.exit_code !== undefined) add('EXIT', String(job.exit_code));
     if (job.spec.tags && job.spec.tags.length) add('TAGS', job.spec.tags.join(', '));
+
+    // Action buttons
+    const actions = document.getElementById('detail-actions');
+    clearChildren(actions);
+    if (['failed', 'cancelled', 'completed'].includes(job.status)) {
+        actions.appendChild(el('button', {
+            className: 'action-btn retry-btn',
+            onclick: () => retryJob(job.id),
+        }, 'RETRY'));
+    }
+    if (['queued', 'running'].includes(job.status)) {
+        actions.appendChild(el('button', {
+            className: 'action-btn cancel-detail-btn',
+            onclick: () => cancelJob(job.id),
+        }, 'KILL'));
+    }
 }
 
 // ── Logs ──
@@ -420,52 +457,20 @@ function renderGpus(gpus) {
     }
 }
 
-// ── Clients ──
+// ── Keys (merged with client activity) ──
 
-let clientsVisible = false;
+let keysVisible = false;
+let cachedClients = {};
 
 async function fetchClients() {
     try {
         const res = await apiFetch(`${API}/clients`);
         const clients = await res.json();
-        document.getElementById('client-count').textContent = clients.length;
-        if (clientsVisible) renderClients(clients);
+        cachedClients = {};
+        for (const c of clients) cachedClients[c.name] = c;
+        if (keysVisible) fetchKeys();
     } catch { /* ignore */ }
 }
-
-function renderClients(clients) {
-    const list = document.getElementById('clients-list');
-    clearChildren(list);
-    if (!clients.length) {
-        list.appendChild(el('div', { className: 'client-empty' }, 'No clients connected'));
-        return;
-    }
-    for (const c of clients) {
-        list.appendChild(el('div', { className: 'client-row' },
-            el('span', { className: 'client-name' }, c.name),
-            el('span', { className: 'client-meta' }, c.request_count + ' reqs'),
-            el('span', { className: 'client-meta' }, timeAgo(c.last_seen) + ' ago'),
-        ));
-    }
-}
-
-document.getElementById('toggle-clients').addEventListener('click', () => {
-    clientsVisible = !clientsVisible;
-    const panel = document.getElementById('clients-panel');
-    const toggle = document.getElementById('toggle-clients');
-    if (clientsVisible) {
-        panel.classList.remove('hidden');
-        toggle.classList.add('active');
-        fetchClients();
-    } else {
-        panel.classList.add('hidden');
-        toggle.classList.remove('active');
-    }
-});
-
-// ── Keys ──
-
-let keysVisible = false;
 
 async function fetchKeys() {
     try {
@@ -479,11 +484,20 @@ function renderKeys(keys) {
     const list = document.getElementById('keys-list');
     clearChildren(list);
     for (const k of keys) {
+        const client = cachedClients[k.name];
         const row = el('div', { className: 'key-row' },
             el('span', { className: 'key-name' }, k.name),
             el('span', { className: 'key-prefix' }, k.key_prefix),
-            el('span', { className: 'key-meta' }, timeAgo(k.created_at) + ' ago'),
         );
+        if (client) {
+            const rph = client.requests_per_hour != null
+                ? (client.requests_per_hour < 10 ? client.requests_per_hour.toFixed(1) : Math.round(client.requests_per_hour))
+                : '?';
+            row.appendChild(el('span', { className: 'key-meta key-activity' }, rph + ' req/hr'));
+            row.appendChild(el('span', { className: 'key-meta' }, timeAgo(client.last_seen) + ' ago'));
+        } else {
+            row.appendChild(el('span', { className: 'key-meta key-inactive' }, 'unused'));
+        }
         if (!k.revocable) {
             const badge = k.name === 'admin' ? 'key-badge-admin' : 'key-badge-config';
             row.appendChild(el('span', { className: `key-badge ${badge}` }, k.name === 'admin' ? 'admin' : 'config'));
@@ -533,6 +547,7 @@ document.getElementById('toggle-keys').addEventListener('click', () => {
     if (keysVisible) {
         panel.classList.remove('hidden');
         toggle.classList.add('active');
+        fetchClients();
         fetchKeys();
     } else {
         panel.classList.add('hidden');
@@ -546,6 +561,26 @@ document.getElementById('toggle-keys').addEventListener('click', () => {
 async function cancelJob(jobId) {
     await apiFetch(`${API}/jobs/${jobId}/cancel`, { method: 'POST' });
     fetchJobs();
+}
+
+async function retryJob(jobId) {
+    try {
+        const res = await apiFetch(`${API}/jobs/${jobId}/retry`, { method: 'POST' });
+        const data = await res.json();
+        fetchJobs();
+        selectJob(data.new_job_id);
+    } catch { /* ignore */ }
+}
+
+function copyLogs() {
+    const output = document.getElementById('log-output');
+    const text = output.textContent;
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copy-logs-btn');
+        btn.textContent = 'COPIED';
+        setTimeout(() => { btn.textContent = 'COPY'; }, 1500);
+    });
 }
 
 // ── Helpers ──
@@ -597,6 +632,9 @@ document.querySelectorAll('.log-tab').forEach(tab => {
     });
 });
 
+// Copy logs
+document.getElementById('copy-logs-btn').addEventListener('click', copyLogs);
+
 // Close detail
 document.getElementById('close-detail').onclick = () => {
     document.getElementById('detail-panel').classList.add('hidden');
@@ -611,7 +649,5 @@ window.addEventListener('resize', updateBodyScroll);
 // Go
 fetchJobs();
 fetchResources();
-fetchClients();
 setInterval(fetchJobs, 3000);
 setInterval(fetchResources, 5000);
-setInterval(fetchClients, 5000);

@@ -53,9 +53,6 @@
                     <span class="toolbar-title">QUEUE</span>
                     <span class="toolbar-count" id="job-count">0</span>
                     <span class="toolbar-sep">|</span>
-                    <span class="toolbar-title toolbar-toggle" id="toggle-clients">CLIENTS</span>
-                    <span class="toolbar-count" id="client-count">0</span>
-                    <span class="toolbar-sep">|</span>
                     <span class="toolbar-title toolbar-toggle" id="toggle-keys">KEYS</span>
                 </div>
                 <div class="toolbar-right">
@@ -68,9 +65,6 @@
                         <button class="pill" data-status="cancelled">Cancelled</button>
                     </div>
                 </div>
-            </div>
-            <div id="clients-panel" class="hidden">
-                <div class="clients-list" id="clients-list"></div>
             </div>
             <div id="keys-panel" class="hidden">
                 <div class="keys-header">
@@ -113,16 +107,20 @@
                 <button id="close-detail" aria-label="Close">&times;</button>
             </div>
             <div id="detail-meta"></div>
+            <div id="detail-actions"></div>
             <div id="log-controls">
                 <div class="log-tabs">
                     <button class="log-tab active" data-stream="both">Combined</button>
                     <button class="log-tab" data-stream="stdout">stdout</button>
                     <button class="log-tab" data-stream="stderr">stderr</button>
                 </div>
-                <label class="follow-toggle">
-                    <input type="checkbox" id="log-follow" checked>
-                    <span>Follow</span>
-                </label>
+                <div class="log-right-controls">
+                    <button id="copy-logs-btn" class="action-btn" title="Copy log output">COPY</button>
+                    <label class="follow-toggle">
+                        <input type="checkbox" id="log-follow" checked>
+                        <span>Follow</span>
+                    </label>
+                </div>
             </div>
             <pre id="log-output"></pre>
         </div>

@@ -27,7 +27,10 @@ use crate::scheduler::SchedulerHandle;
 pub struct ClientInfo {
     pub name: String,
     pub last_seen: chrono::DateTime<chrono::Utc>,
+    pub first_seen: chrono::DateTime<chrono::Utc>,
     pub request_count: u64,
+    /// Requests per hour, computed from first_seen and request_count.
+    pub requests_per_hour: f64,
 }
 
 pub type ClientTracker = Arc<RwLock<HashMap<String, ClientInfo>>>;
@@ -83,6 +86,7 @@ pub fn build_router(
         .route("/jobs/{id}", get(api::get_job))
         .route("/jobs/{id}/logs", get(api::get_job_logs))
         .route("/jobs/{id}/cancel", post(api::cancel_job))
+        .route("/jobs/{id}/retry", post(api::retry_job))
         .route("/resources", get(api::get_resources))
         .route("/dl", get(api::get_download))
         .route("/clients", get(api::list_clients))
@@ -211,14 +215,23 @@ async fn auth_middleware(
         Some(ref secret) => {
             match key_store.validate(secret).await {
                 Some(name) => {
+                    let now = chrono::Utc::now();
                     let mut clients = tracker.write().await;
                     let entry = clients.entry(name.clone()).or_insert_with(|| ClientInfo {
                         name,
-                        last_seen: chrono::Utc::now(),
+                        last_seen: now,
+                        first_seen: now,
                         request_count: 0,
+                        requests_per_hour: 0.0,
                     });
-                    entry.last_seen = chrono::Utc::now();
+                    entry.last_seen = now;
                     entry.request_count += 1;
+                    let elapsed_hours = (now - entry.first_seen).num_seconds() as f64 / 3600.0;
+                    entry.requests_per_hour = if elapsed_hours > 0.0 {
+                        entry.request_count as f64 / elapsed_hours
+                    } else {
+                        entry.request_count as f64
+                    };
                     drop(clients);
                     next.run(req).await
                 }

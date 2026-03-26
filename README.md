@@ -3,7 +3,7 @@
 Resource-aware job scheduler for GPU homelab servers. Lets multiple Claude Code instances submit and monitor workloads via MCP.
 
 Single Rust binary that serves:
-- **MCP server** (streamable HTTP) — Claude Code connects directly
+- **MCP server** (HTTP) — Claude Code connects directly
 - **Job scheduler** — priority queue, concurrent dispatch, process management
 - **Web dashboard** — live job queue, log tailing, GPU/CPU/RAM metrics
 - **REST API** + **SSE event stream** — for the dashboard and custom integrations
@@ -36,22 +36,25 @@ docker compose up -d --build
 
 ## Claude Code Setup
 
-Add to your MCP config (project `.mcp.json` or user-level):
+Add to your MCP config (project `.mcp.json` or user-level). Generate an API key from the dashboard's **KEYS** panel (an admin key is printed to stdout on first startup):
 
 ```json
 {
   "mcpServers": {
     "wartable": {
-      "type": "streamable-http",
-      "url": "http://<server-ip>:9400/mcp"
+      "type": "http",
+      "url": "http://<server-ip>:9400/mcp",
+      "headers": {
+        "Authorization": "Bearer <key>"
+      }
     }
   }
 }
 ```
 
-If auth is enabled, add `"headers": { "Authorization": "Bearer <key>" }`. Generate keys from the dashboard's **KEYS** panel.
-
 Restart Claude Code and you'll have `submit_job`, `list_jobs`, `get_job_status`, `get_job_logs`, `cancel_job`, `upload_file`, and `download_file`.
+
+> To disable auth, set `[auth] enabled = false` in `config.toml` and drop the `headers` field.
 
 ## Push Notifications (Channel)
 
@@ -69,7 +72,7 @@ Register the channel in your project:
 claude mcp add wartable-channel -s project -- npx tsx /path/to/wartable/channel/wartable-channel.ts
 ```
 
-Then edit `.mcp.json` to add the `env` block with your server URL:
+Then edit `.mcp.json` to add the `env` block with your server URL and API key:
 
 ```json
 {
@@ -78,7 +81,8 @@ Then edit `.mcp.json` to add the `env` block with your server URL:
       "command": "npx",
       "args": ["tsx", "/path/to/wartable/channel/wartable-channel.ts"],
       "env": {
-        "WARTABLE_URL": "http://<server-ip>:9400"
+        "WARTABLE_URL": "http://<server-ip>:9400",
+        "WARTABLE_API_KEY": "<key>"
       }
     }
   }
@@ -110,6 +114,11 @@ port = 9400
 [scheduler]
 max_concurrent_jobs = 8
 
+[scheduler.gpu]
+# policy = "least-loaded"               # or "packed"
+# device_env_var = "CUDA_VISIBLE_DEVICES"
+# vram_gb = [22.0, 22.0]                # override per-device VRAM budget (GB)
+
 [workers]
 default_working_dir = "/opt/wartable/jobs"
 log_dir = "/opt/wartable/logs"
@@ -117,22 +126,54 @@ kill_grace_period_secs = 10
 # extra_allowed_dirs = ["~/projects"]
 
 [auth]
-enabled = false
-# api_keys = [{ name = "my-client", key = "wt-secret" }]
+# enabled = true                         # disable with: enabled = false
+api_keys = [
+  { name = "claude", key = "wt-my-secret-key" },
+  # { name = "channel", key = "wt-another-key" },
+]
 
 [dashboard]
 enabled = true
 ```
 
-### Authentication
+Auth is on by default — all routes require an API key. The dashboard auto-authenticates via session cookie. An admin key is printed to stdout on first startup.
 
-When `[auth] enabled = true`, all routes require an API key. The dashboard auto-authenticates via session cookie. Generate keys for MCP clients from the dashboard's **KEYS** panel, or pre-configure them in `config.toml`.
+You can pre-configure static keys in `config.toml` (as shown above) or generate them from the dashboard's **KEYS** panel. Use the same key value in your MCP config's `Authorization` header and/or `WARTABLE_API_KEY` env var for the channel.
 
 ### Permissions
 
 Jobs run as the wartable process owner. The deploy script creates a `wartable` system user by default. Use `WARTABLE_USER=myuser ./deploy.sh` to run as a different user. If running manually (`cargo run`), jobs use your current user.
 
 For GPU access, the deploy script adds the user to `video` and `render` groups automatically.
+
+### GPU Scheduling
+
+Jobs request GPU resources via `gpu_count` and `gpu_vram_min_gb` (required when `gpu_count > 0`). The scheduler tracks both a per-device VRAM **budget** (what wartable jobs have claimed) and **live VRAM** from NVML (refreshed with a 10s cooldown). A GPU is only eligible if both budget and live VRAM have enough headroom — so external processes like a vLLM inference server are automatically accounted for.
+
+When a job is dispatched, the scheduler injects `CUDA_VISIBLE_DEVICES` (configurable via `device_env_var`) so the process only sees its assigned GPUs. VRAM budgets are released when the job completes, fails, or is cancelled.
+
+**Policies:**
+
+| Policy | Behavior |
+|---|---|
+| `least-loaded` (default) | Picks GPUs with the fewest active jobs, breaking ties by most free VRAM. |
+| `packed` | Fills lowest-indexed GPU first. Keeps some GPUs idle for interactive use. |
+
+**Example — submitting a job that needs 8 GB VRAM on 1 GPU:**
+
+```json
+{
+  "command": "python train.py",
+  "gpu_count": 1,
+  "gpu_vram_min_gb": 8.0
+}
+```
+
+The scheduler will pick a GPU with at least 8 GB free (by both budget and live NVML check), set `CUDA_VISIBLE_DEVICES=<idx>`, and reserve 8 GB against that device until the job finishes.
+
+**VRAM budget overrides:** Total VRAM per GPU is auto-detected via NVML. Use `[scheduler.gpu] vram_gb` to cap the budget below physical VRAM (e.g., to reserve headroom for a compositor or inference server). If NVML is unavailable and `vram_gb` is not set, GPU budget enforcement is skipped.
+
+**Custom device env var:** Some frameworks use different env vars (e.g., `HIP_VISIBLE_DEVICES` for ROCm). Set `device_env_var` accordingly.
 
 ## Architecture
 
