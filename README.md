@@ -83,7 +83,7 @@ Register the channel in your project:
 claude mcp add wartable-channel -s project -- npx tsx /path/to/wartable/channel/wartable-channel.ts
 ```
 
-Then edit `.mcp.json` to add the `env` block with your server URL:
+Then edit `.mcp.json` to add the `env` block with your server URL and API key:
 
 ```json
 {
@@ -92,12 +92,15 @@ Then edit `.mcp.json` to add the `env` block with your server URL:
       "command": "npx",
       "args": ["tsx", "/path/to/wartable/channel/wartable-channel.ts"],
       "env": {
-        "WARTABLE_URL": "http://<server-ip>:9400"
+        "WARTABLE_URL": "http://<server-ip>:9400",
+        "WARTABLE_API_KEY": "<key>"
       }
     }
   }
 }
 ```
+
+`WARTABLE_API_KEY` is required when auth is enabled (the default). Generate a key from the dashboard's **KEYS** panel.
 
 Start Claude Code with the channel enabled:
 
