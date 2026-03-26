@@ -3,7 +3,7 @@
 Resource-aware job scheduler for GPU homelab servers. Lets multiple Claude Code instances submit and monitor workloads via MCP.
 
 Single Rust binary that serves:
-- **MCP server** (streamable HTTP) — Claude Code connects directly
+- **MCP server** (HTTP) — Claude Code connects directly
 - **Job scheduler** — priority queue, concurrent dispatch, process management
 - **Web dashboard** — live job queue, log tailing, GPU/CPU/RAM metrics
 - **REST API** + **SSE event stream** — for the dashboard and custom integrations
@@ -148,7 +148,7 @@ For GPU access, the deploy script adds the user to `video` and `render` groups a
 
 ### GPU Scheduling
 
-Jobs can request GPU resources via `gpu_count` and `gpu_vram_min_gb` in their resource requirements. The scheduler tracks a per-device VRAM **budget** (not live usage) and only dispatches a job when enough headroom exists.
+Jobs request GPU resources via `gpu_count` and `gpu_vram_min_gb` (required when `gpu_count > 0`). The scheduler tracks both a per-device VRAM **budget** (what wartable jobs have claimed) and **live VRAM** from NVML (refreshed with a 10s cooldown). A GPU is only eligible if both budget and live VRAM have enough headroom — so external processes like a vLLM inference server are automatically accounted for.
 
 When a job is dispatched, the scheduler injects `CUDA_VISIBLE_DEVICES` (configurable via `device_env_var`) so the process only sees its assigned GPUs. VRAM budgets are released when the job completes, fails, or is cancelled.
 
@@ -156,7 +156,7 @@ When a job is dispatched, the scheduler injects `CUDA_VISIBLE_DEVICES` (configur
 
 | Policy | Behavior |
 |---|---|
-| `least-loaded` (default) | Picks GPUs with the most free VRAM budget. Spreads work to reduce contention. |
+| `least-loaded` (default) | Picks GPUs with the fewest active jobs, breaking ties by most free VRAM. |
 | `packed` | Fills lowest-indexed GPU first. Keeps some GPUs idle for interactive use. |
 
 **Example — submitting a job that needs 8 GB VRAM on 1 GPU:**
@@ -169,9 +169,9 @@ When a job is dispatched, the scheduler injects `CUDA_VISIBLE_DEVICES` (configur
 }
 ```
 
-The scheduler will pick a GPU with at least 8 GB of free budget, set `CUDA_VISIBLE_DEVICES=<idx>`, and reserve 8 GB against that device until the job finishes.
+The scheduler will pick a GPU with at least 8 GB free (by both budget and live NVML check), set `CUDA_VISIBLE_DEVICES=<idx>`, and reserve 8 GB against that device until the job finishes.
 
-**Overriding VRAM budgets:** By default, total VRAM per GPU is auto-detected via NVML. Use `[scheduler.gpu] vram_gb` to cap or override (e.g., to leave headroom for the desktop compositor). If NVML is unavailable and `vram_gb` is not set, GPU budget enforcement is skipped and jobs will dispatch without GPU restrictions.
+**VRAM budget overrides:** Total VRAM per GPU is auto-detected via NVML. Use `[scheduler.gpu] vram_gb` to cap the budget below physical VRAM (e.g., to reserve headroom for a compositor or inference server). If NVML is unavailable and `vram_gb` is not set, GPU budget enforcement is skipped.
 
 **Custom device env var:** Some frameworks use different env vars (e.g., `HIP_VISIBLE_DEVICES` for ROCm). Set `device_env_var` accordingly.
 
