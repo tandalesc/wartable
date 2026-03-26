@@ -286,30 +286,13 @@ main {
 .toolbar-toggle:hover { color: var(--text); }
 .toolbar-toggle.active { color: var(--accent); }
 
-/* ── Clients Panel ── */
-#clients-panel, #keys-panel {
+/* ── Keys Panel ── */
+#keys-panel {
     border-bottom: 1px solid var(--border);
     padding: 8px 16px;
     background: var(--bg-2);
 }
-#clients-panel.hidden, #keys-panel.hidden { display: none; }
-
-.clients-list { display: flex; flex-direction: column; gap: 4px; }
-
-.client-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 4px 8px;
-    border-radius: var(--radius);
-    font-size: 11px;
-}
-
-.client-name { color: var(--accent); font-weight: 500; min-width: 100px; }
-.client-meta { color: var(--text-dim); font-size: 10px; }
-.client-empty { color: var(--text-faint); font-size: 11px; padding: 4px 8px; }
-
-/* ── Keys Panel ── */
+#keys-panel.hidden { display: none; }
 .keys-header {
     display: flex;
     gap: 8px;
@@ -404,6 +387,9 @@ main {
 }
 .key-badge-admin { background: rgba(79,193,255,0.12); color: var(--accent); }
 .key-badge-config { background: rgba(100,116,139,0.15); color: var(--gray); }
+
+.key-activity { color: var(--green); }
+.key-inactive { color: var(--text-faint); font-style: italic; }
 
 .table-wrap {
     flex: 1;
