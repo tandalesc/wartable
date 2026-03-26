@@ -42,7 +42,9 @@ async function pollLogs(sub: LogSubscription) {
       { headers: authHeaders() }
     );
     if (!res.ok) {
-      if (res.status === 404) {
+      if (res.status === 401) {
+        console.error(`Auth failed polling logs for ${sub.jobId} — is WARTABLE_API_KEY set?`);
+      } else if (res.status === 404) {
         // Job gone — clean up
         unsubscribe(sub.jobId);
         await mcp.notification({
@@ -261,8 +263,13 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       headers: authHeaders(),
     });
     if (!res.ok) {
+      const msg = res.status === 401
+        ? `Auth failed (401) — is WARTABLE_API_KEY set?`
+        : res.status === 404
+        ? `Job not found: ${jobId}`
+        : `Failed to fetch job ${jobId}: HTTP ${res.status}`;
       return {
-        content: [{ type: "text" as const, text: `Job not found: ${jobId}` }],
+        content: [{ type: "text" as const, text: msg }],
         isError: true,
       };
     }
