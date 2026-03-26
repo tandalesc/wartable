@@ -136,17 +136,24 @@ impl ServerHandler for WartableTools {
 
 #[tool_router]
 impl WartableTools {
-    #[tool(description = "Submit a job to the wartable work queue. Returns job_id, status, and queue position.")]
+    #[tool(description = "Submit a job to the wartable work queue. Returns job_id, status, and queue position. When requesting GPUs (gpu_count > 0), gpu_vram_min_gb is required.")]
     async fn submit_job(
         &self,
         Parameters(params): Parameters<SubmitJobParams>,
     ) -> String {
+        let gpu_count = params.gpu_count.unwrap_or(0);
+        if gpu_count > 0 && params.gpu_vram_min_gb.is_none() {
+            return serde_json::json!({
+                "error": "gpu_vram_min_gb is required when gpu_count > 0"
+            }).to_string();
+        }
+
         let spec = JobSpec {
             command: params.command,
             working_dir: params.working_dir,
             env: params.env.unwrap_or_default(),
             resources: ResourceRequirements {
-                gpu_count: params.gpu_count.unwrap_or(0),
+                gpu_count,
                 gpu_vram_min_gb: params.gpu_vram_min_gb,
                 cpu_cores: params.cpu_cores,
                 ram_min_gb: params.ram_min_gb,
